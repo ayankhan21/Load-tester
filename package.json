@@ -1,0 +1,30 @@
+{
+  "name": "social-load-lab",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node --watch --import tsx src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "db:init": "node --import tsx ./scripts/init-db.ts",
+    "seed": "node --import tsx ./scripts/seed.ts",
+    "load:test": "node --import tsx ./scripts/load-test.ts",
+    "traffic:test": "node ./scripts/run-k6.js",
+    "traffic:legacy": "node --import tsx ./scripts/traffic-load.ts",
+    "load:autocannon": "npx autocannon -c 20 -d 10 --renderStatusCodes --latency http://127.0.0.1:3000/health"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "fastify": "^5.1.0",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^9.0.0",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.0",
+    "autocannon": "^8.0.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.7.0"
+  }
+}

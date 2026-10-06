@@ -1,0 +1,169 @@
+Natural-flow traffic benchmark
+durationMs=60000
+vus=100
+throughputRps=111.06
+avgMs=10.72
+p50Ms=8.10
+p95Ms=17.37
+maxMs=217.47
+success=6275
+failed=543
+statusCounts=400:543, 200:3720, 201:2555
+actionMix=follow:543, feed:3720, post:1709, like:846
+cpuUserMs=6656.00
+cpuSystemMs=1687.00
+cpuPercent=13.59
+rssMb=97.25
+heapUsedMb=22.81
+heapTotalMb=50.25
+loadAvg1m=0.00
+loadAvg5m=0.00
+loadAvg15m=0.00
+
+Natural-flow traffic benchmark
+durationMs=60000
+vus=200
+throughputRps=220.53
+avgMs=12.25
+p50Ms=8.09
+p95Ms=17.07
+maxMs=350.20
+success=12409
+failed=1136
+statusCounts=400:1134, 200:7452, 201:4957, 409:2
+actionMix=follow:1134, feed:7452, post:3341, like:1618
+cpuUserMs=9688.00
+cpuSystemMs=3390.00
+cpuPercent=21.29
+rssMb=129.17
+heapUsedMb=23.27
+heapTotalMb=52.25
+loadAvg1m=0.00
+loadAvg5m=0.00
+loadAvg15m=0.00
+
+Natural-flow traffic benchmark
+durationMs=60000
+vus=500
+throughputRps=550.07
+avgMs=18.03
+p50Ms=8.43
+p95Ms=24.91
+maxMs=806.99
+success=31031
+failed=2780
+statusCounts=400:2778, 200:18473, 201:12558, 409:2
+actionMix=follow:2778, feed:18473, post:8515, like:4045
+cpuUserMs=16204.00
+cpuSystemMs=6594.00
+cpuPercent=37.09
+rssMb=140.17
+heapUsedMb=38.68
+heapTotalMb=87.43
+loadAvg1m=0.00
+loadAvg5m=0.00
+loadAvg15m=0.00
+
+Natural-flow traffic benchmark
+durationMs=60000
+vus=1000
+throughputRps=802.11
+avgMs=347.94
+p50Ms=364.26
+p95Ms=595.07
+maxMs=1516.79
+success=45518
+failed=4008
+statusCounts=400:4002, 200:27139, 201:18379, 409:6
+actionMix=follow:4002, feed:27139, post:12317, like:6068
+cpuUserMs=26578.00
+cpuSystemMs=9907.00
+cpuPercent=59.09
+rssMb=180.02
+heapUsedMb=85.03
+heapTotalMb=124.35
+loadAvg1m=0.00
+loadAvg5m=0.00
+loadAvg15m=0.00
+
+Natural-flow traffic benchmark
+durationMs=60000
+vus=2000
+throughputRps=642.47
+avgMs=2130.78
+p50Ms=2283.79
+p95Ms=3374.63
+maxMs=3641.65
+success=37497
+failed=3352
+statusCounts=400:3349, 200:22319, 201:15178, 409:3
+actionMix=follow:3349, feed:22319, post:10329, like:4852
+cpuUserMs=27078.00
+cpuSystemMs=10891.00
+cpuPercent=59.72
+rssMb=257.09
+heapUsedMb=34.20
+heapTotalMb=195.68
+loadAvg1m=0.00
+loadAvg5m=0.00
+loadAvg15m=0.00
+
+Natural-flow traffic benchmark
+durationMs=60000
+vus=5000
+throughputRps=738.92
+avgMs=5484.09
+p50Ms=5956.74
+p95Ms=7393.08
+maxMs=8701.86
+success=45415
+failed=3983
+statusCounts=400:3975, 200:27189, 201:18226, 409:8
+actionMix=follow:3975, feed:27189, post:12339, like:5895
+cpuUserMs=36234.00
+cpuSystemMs=12640.00
+cpuPercent=73.11
+rssMb=523.30
+heapUsedMb=311.99
+heapTotalMb=422.60
+loadAvg1m=0.00
+loadAvg5m=0.00
+loadAvg15m=0.00
+
+Natural-flow traffic benchmark
+durationMs=60000
+vus=5000
+throughputRps=738.19
+avgMs=5478.65
+p50Ms=5682.98
+p95Ms=7485.14
+maxMs=7873.60
+success=45471
+failed=3996
+statusCounts=400:3989, 200:27173, 201:18298, 409:7
+actionMix=follow:3989, feed:27173, post:12338, like:5967
+cpuUserMs=34156.00
+cpuSystemMs=14422.00
+cpuPercent=72.49
+rssMb=510.68
+heapUsedMb=344.78
+heapTotalMb=421.34
+loadAvg1m=0.00
+loadAvg5m=0.00
+loadAvg15m=0.00
+
+Memory samples during 5000-VU run (approximately every 5-7 seconds)
+elapsedSeconds,apiRssMiB,apiPrivateMiB,postgresMiB
+5,186.4,208.2,265.1
+12,292.1,316.8,262.5
+19,295.9,320.4,262.6
+26,304.2,328.4,263.3
+33,304.4,328.4,263.7
+40,307.6,332.2,262.9
+47,306.6,331.3,265.1
+54,307.9,332.3,262.8
+62,308.1,332.5,263.1
+68,308.6,333.5,259.5
+apiPeakRssMiB=308.6
+apiPeakPrivateMiB=333.5
+postgresRangeMiB=259.5-265.1
