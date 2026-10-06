@@ -6,6 +6,8 @@
   "scripts": {
     "predev": "npm run setup",
     "dev": "node --watch --import tsx src/server.ts",
+    "predev:cluster": "npm run setup",
+    "dev:cluster": "node --import tsx src/server.ts --cluster",
     "setup": "node --import tsx ./scripts/setup.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
@@ -13,6 +15,7 @@
     "seed": "node --import tsx ./scripts/seed.ts",
     "load:test": "node --import tsx ./scripts/load-test.ts",
     "traffic:test": "node ./scripts/run-k6.js",
+    "traffic:test:cluster": "node ./scripts/run-k6.js --mode=cluster",
     "traffic:legacy": "node --import tsx ./scripts/traffic-load.ts",
     "load:autocannon": "npx autocannon -c 20 -d 10 --renderStatusCodes --latency http://127.0.0.1:3000/health"
   },

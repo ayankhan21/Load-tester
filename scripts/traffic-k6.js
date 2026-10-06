@@ -80,3 +80,26 @@ export default function () {
     Math.random() * (thinkMaxSeconds - thinkMinSeconds) + thinkMinSeconds;
   sleep(thinkTime);
 }
+
+export function handleSummary(data) {
+  const requestMetrics = data.metrics.http_reqs.values;
+  const durationMetrics = data.metrics.http_req_duration.values;
+  const failedRate = data.metrics.http_req_failed.values.rate ?? 0;
+  const checkMetrics = data.metrics.checks.values;
+  const summary = {
+    totalRequests: requestMetrics.count ?? 0,
+    throughputRps: requestMetrics.rate ?? 0,
+    avgMs: durationMetrics.avg ?? 0,
+    p50Ms: durationMetrics.med ?? 0,
+    p95Ms: durationMetrics["p(95)"] ?? 0,
+    maxMs: durationMetrics.max ?? 0,
+    failedRequests: Math.round((requestMetrics.count ?? 0) * failedRate),
+    failedPercent: failedRate * 100,
+    checksPassed: checkMetrics.passes ?? 0,
+    checksFailed: checkMetrics.fails ?? 0,
+  };
+
+  return {
+    stdout: `K6_METRICS_JSON=${JSON.stringify(summary)}\n`,
+  };
+}

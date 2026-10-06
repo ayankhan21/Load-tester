@@ -23,4 +23,5 @@ export const env = {
   dbPassword: process.env.DB_PASSWORD ?? "postgres",
   dbPoolMin: getNumber("DB_POOL_MIN", 2),
   dbPoolMax: getNumber("DB_POOL_MAX", 20),
+  clusterPort: getNumber("CLUSTER_PORT", 3001),
 };
