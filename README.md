@@ -1,133 +1,57 @@
 # Social Load Lab
 
-A small PostgreSQL-backed social media backend used as a personal performance lab. The goal is to keep the stack intentionally simple so the database behavior is easy to inspect and optimize later.
+A PostgreSQL-backed social API and k6 performance-testing lab.
 
-## Requirements
+## Quick start
 
-- Node.js 20+
-- npm
-- Docker Desktop or Docker Engine
-- k6 for the live traffic dashboard (install the CLI and make sure `k6` is available on your PATH; [installation guide](https://grafana.com/docs/k6/latest/set-up/install-k6/))
-
-## Start PostgreSQL
+Requirements: Node.js 20+, npm, and Docker Desktop (or Docker Engine with Compose).
 
 ```bash
-docker compose up -d
-```
-
-This starts a local PostgreSQL instance on `localhost:5432` using a Docker volume for persistence.
-
-## Install dependencies
-
-```bash
+git clone https://github.com/ayankhan21/Load-tester.git
+cd Load-tester
 npm install
-```
-
-## Configure environment
-
-Copy the example environment file and adjust values if needed:
-
-```bash
-cp .env.example .env
-```
-
-The default values are:
-
-```env
-PORT=3000
-
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=social
-DB_USER=postgres
-DB_PASSWORD=postgres
-
-DB_POOL_MIN=2
-DB_POOL_MAX=20
-```
-
-## Initialize the database schema
-
-```bash
-npm run db:init
-```
-
-## Seed a small dataset
-
-```bash
-npm run seed -- --users=1000 --posts=10000
-```
-
-## Seed the full dataset
-
-```bash
-npm run seed -- --users=50000 --posts=500000
-```
-
-## Start the API
-
-```bash
 npm run dev
 ```
 
-The API will listen on `http://localhost:3000`.
+On first run, `npm run dev` starts PostgreSQL, creates the schema, and seeds the default dataset. It reuses existing data on later runs. The API is at `http://localhost:3000`.
 
-## Run the live traffic test
+Default settings work without a `.env` file. Copy `.env.example` to `.env` only if you want to override them.
 
-With the API running, start the k6 traffic test:
+## Run a traffic test
+
+With the API running, use:
 
 ```bash
 npm run traffic:test
 ```
 
-k6 opens its live web dashboard at `http://localhost:6000`. The test uses 20 virtual users for 30 seconds by default, with the same feed, post, like, and follow traffic mix as the original runner.
+The k6 image is run by Docker, so no separate k6 installation is needed. The live dashboard is at `http://localhost:6000`. The default test runs 20 virtual users for 30 seconds.
 
-Pass k6 options after `--` to change the load:
-
-```bash
-npm run traffic:test -- --vus 100 --duration 60s
-```
-
-The previous TypeScript traffic runner remains available as `npm run traffic:legacy`.
-
-## API endpoints
-
-### Health
+Change the load with k6 options:
 
 ```bash
-curl http://localhost:3000/health
+node ./scripts/run-k6.js --vus=100 --duration=60s
 ```
 
-### Feed
+## Database and data
+
+PostgreSQL runs on `localhost:5432` with data stored in a Docker volume. To start or stop it separately:
 
 ```bash
-curl "http://localhost:3000/users/123/feed?limit=20"
+docker compose up -d postgres
+docker compose down
 ```
 
-### Create post
+The default seed contains 5,000 users and 50,000 posts, plus follows and likes. To add more seed data manually:
 
 ```bash
-curl -X POST http://localhost:3000/posts \
-  -H "Content-Type: application/json" \
-  -d '{"userId":123,"content":"Hello world"}'
+npm run seed -- --users=1000 --posts=10000
 ```
 
-### Like post
+## API
 
-```bash
-curl -X POST http://localhost:3000/posts/456/like \
-  -H "Content-Type: application/json" \
-  -d '{"userId":123}'
-```
-
-### Follow user
-
-```bash
-curl -X POST http://localhost:3000/users/123/follow/456
-```
-
-## Notes
-
-- This project intentionally does not add Redis, Kafka, authentication, or ORM layers.
-- The backend uses raw SQL through `pg` so query behavior stays explicit.
-- The seed process is built for large dataset generation without doing one insert per row in a tight loop.
+- `GET /health`
+- `GET /users/:userId/feed?limit=20`
+- `POST /posts`
+- `POST /posts/:postId/like`
+- `POST /users/:userId/follow/:targetUserId`

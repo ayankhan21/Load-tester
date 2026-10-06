@@ -4,7 +4,9 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
+    "predev": "npm run setup",
     "dev": "node --watch --import tsx src/server.ts",
+    "setup": "node --import tsx ./scripts/setup.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "db:init": "node --import tsx ./scripts/init-db.ts",
