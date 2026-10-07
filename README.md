@@ -46,7 +46,7 @@ node ./scripts/run-k6.js --mode=single --vus=100 --duration=60s
 node ./scripts/run-k6.js --mode=cluster --vus=100 --duration=60s
 ```
 
-Results append to `traffic-metrics.txt` or `traffic-metrics-cluster-mode.txt` according to the mode.
+Results from either mode append to a local-date file such as `traffic-metrics-7-10-2026.txt`; each entry records its mode. Repeated runs on the same date append to the same file.
 
 Example results from one local 60-second run:
 

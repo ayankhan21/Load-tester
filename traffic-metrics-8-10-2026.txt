@@ -1,0 +1,79 @@
+
+k6 traffic benchmark
++---------------------------+--------------------------+
+| Timestamp                 | 2026-10-07T18:45:41.229Z |
+| Mode                      | single                   |
+| Workload                  | stable user per VU       |
+| Virtual users             | 500                      |
+| Duration                  | 30s                      |
+| DB pool max               | 50                       |
+| Feed cache TTL (ms)       | 5000                     |
+| Total requests            | 16672                    |
+| Throughput (RPS)          | 29.57                    |
+| Average latency (ms)      | 29.23                    |
+| p50 latency (ms)          | 3.90                     |
+| p95 latency (ms)          | 26.05                    |
+| Max latency (ms)          | 1199.43                  |
+| Failed requests           | 1353                     |
+| Failed (%)                | 8.12                     |
+| Checks passed             | 15319                    |
+| Checks failed             | 1353                     |
+| Feed cache hits           | 6795                     |
+| Feed cache misses         | 2514                     |
+| Feed cache bypasses       | 4                        |
+| Feed cache hit (%)        | 72.99                    |
+| Feed requests             | 9313                     |
+| Feed average latency (ms) | 35.56                    |
+| Feed p95 latency (ms)     | 26.72                    |
++---------------------------+--------------------------+
+
+k6 traffic benchmark
++----------------------+----------------------------------------+
+| Timestamp            | 2026-10-07T18:51:55.493Z               |
+| Mode                 | single                                 |
+| Workload             | random user per action                 |
+| Configured mix       | feed 80%, follow 5%, like 10%, post 5% |
+| Virtual users        | 2000                                   |
+| Duration             | 10s                                    |
+| DB pool max          | 50                                     |
+| Total requests       | 6163                                   |
+| Throughput (RPS)     | 438.18                                 |
+| Average latency (ms) | 2759.04                                |
+| p50 latency (ms)     | 3062.30                                |
+| p95 latency (ms)     | 4071.71                                |
+| Max latency (ms)     | 4391.47                                |
+| Failed requests      | 716                                    |
+| Failed (%)           | 11.62                                  |
+| Checks passed        | 5447                                   |
+| Checks failed        | 716                                    |
+| Feed requests        | 4931                                   |
+| Follow requests      | 294                                    |
+| Like requests        | 649                                    |
+| Post requests        | 289                                    |
++----------------------+----------------------------------------+
+
+k6 traffic benchmark
++----------------------+----------------------------------------+
+| Timestamp            | 2026-10-07T18:57:36.352Z               |
+| Mode                 | single                                 |
+| Workload             | random user per action                 |
+| Configured mix       | feed 80%, follow 5%, like 10%, post 5% |
+| Virtual users        | 2000                                   |
+| Duration             | 10s                                    |
+| DB pool max          | 50                                     |
+| Total requests       | 6567                                   |
+| Throughput (RPS)     | 164.19                                 |
+| Average latency (ms) | 2565.53                                |
+| p50 latency (ms)     | 2967.10                                |
+| p95 latency (ms)     | 3590.81                                |
+| Max latency (ms)     | 3884.00                                |
+| Failed requests      | 772                                    |
+| Failed (%)           | 11.76                                  |
+| Checks passed        | 5795                                   |
+| Checks failed        | 772                                    |
+| Feed requests        | 5209                                   |
+| Follow requests      | 367                                    |
+| Like requests        | 658                                    |
+| Post requests        | 333                                    |
+| Failed status counts | 400:346, 409:2, network_error:424      |
++----------------------+----------------------------------------+

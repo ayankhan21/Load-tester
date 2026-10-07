@@ -36,16 +36,25 @@ function optionValue(name, fallback) {
   return flagIndex >= 0 ? (k6Args[flagIndex + 1] ?? fallback) : fallback;
 }
 
+function formatTable(title, rows) {
+  const keyWidth = Math.max(...rows.map(([key]) => key.length));
+  const valueWidth = Math.max(...rows.map(([, value]) => String(value).length));
+  const border = `+${"-".repeat(keyWidth + 2)}+${"-".repeat(valueWidth + 2)}+`;
+  const formattedRows = rows.map(
+    ([key, value]) =>
+      `| ${key.padEnd(keyWidth)} | ${String(value).padEnd(valueWidth)} |`,
+  );
+
+  return [title, border, ...formattedRows, border].join("\n");
+}
+
 const port =
   mode === "cluster"
     ? (process.env.CLUSTER_PORT ?? "3001")
     : (process.env.PORT ?? "3000");
-const outputPath = join(
-  process.cwd(),
-  mode === "cluster"
-    ? "traffic-metrics-cluster-mode.txt"
-    : "traffic-metrics.txt",
-);
+const runDate = new Date();
+const dateSuffix = `${runDate.getDate()}-${runDate.getMonth() + 1}-${runDate.getFullYear()}`;
+const outputPath = join(process.cwd(), `traffic-metrics-${dateSuffix}.txt`);
 let stdout = "";
 let stderr = "";
 
@@ -110,26 +119,37 @@ child.on("close", (code, signal) => {
 
   try {
     const metrics = JSON.parse(match[1]);
-    const report = [
-      "k6 traffic benchmark",
-      `timestamp=${new Date().toISOString()}`,
-      `mode=${mode}`,
-      `vus=${optionValue("vus", "20")}`,
-      `duration=${optionValue("duration", "30s")}`,
-      `totalRequests=${metrics.totalRequests}`,
-      `throughputRps=${metrics.throughputRps.toFixed(2)}`,
-      `avgMs=${metrics.avgMs.toFixed(2)}`,
-      `p50Ms=${metrics.p50Ms.toFixed(2)}`,
-      `p95Ms=${metrics.p95Ms.toFixed(2)}`,
-      `maxMs=${metrics.maxMs.toFixed(2)}`,
-      `failedRequests=${metrics.failedRequests}`,
-      `failedPercent=${metrics.failedPercent.toFixed(2)}`,
-      `checksPassed=${metrics.checksPassed}`,
-      `checksFailed=${metrics.checksFailed}`,
-      "",
-    ].join("\n");
+    const report = formatTable("k6 traffic benchmark", [
+      ["Timestamp", new Date().toISOString()],
+      ["Mode", mode],
+      ["Workload", "random user per action"],
+      ["Configured mix", "feed 80%, follow 5%, like 10%, post 5%"],
+      ["Virtual users", optionValue("vus", "20")],
+      ["Duration", optionValue("duration", "30s")],
+      ["DB pool max", process.env.DB_POOL_MAX ?? "20"],
+      ["Total requests", String(metrics.totalRequests)],
+      ["Throughput (RPS)", metrics.throughputRps.toFixed(2)],
+      ["Average latency (ms)", metrics.avgMs.toFixed(2)],
+      ["p50 latency (ms)", metrics.p50Ms.toFixed(2)],
+      ["p95 latency (ms)", metrics.p95Ms.toFixed(2)],
+      ["Max latency (ms)", metrics.maxMs.toFixed(2)],
+      ["Failed requests", String(metrics.failedRequests)],
+      ["Failed (%)", metrics.failedPercent.toFixed(2)],
+      ["Checks passed", String(metrics.checksPassed)],
+      ["Checks failed", String(metrics.checksFailed)],
+      ["Feed requests", String(metrics.feedRequests)],
+      ["Follow requests", String(metrics.followRequests)],
+      ["Like requests", String(metrics.likeRequests)],
+      ["Post requests", String(metrics.postRequests)],
+      [
+        "Failed status counts",
+        Object.entries(metrics.failedStatusCounts)
+          .map(([statusCode, count]) => `${statusCode}:${count}`)
+          .join(", ") || "none",
+      ],
+    ]);
 
-    appendFileSync(outputPath, `\n${report}`, "utf8");
+    appendFileSync(outputPath, `\n${report}\n`, "utf8");
     console.log(report);
   } catch (error) {
     console.error("Could not append k6 metrics:", error);
