@@ -2,7 +2,7 @@ import cluster from "node:cluster";
 import { availableParallelism } from "node:os";
 import Fastify from "fastify";
 import { env } from "./config/env";
-import { pool } from "./db/pool";
+import { pool, replicaReadPool } from "./db/pool";
 import { healthRoutes } from "./routes/health";
 import { postsRoutes } from "./routes/posts";
 import { usersRoutes } from "./routes/users";
@@ -36,11 +36,30 @@ function createApp() {
   return app;
 }
 
-async function start(port: number): Promise<void> {
+async function start(port: number, readReplicaMode = false): Promise<void> {
   const app = createApp();
   try {
     await pool.query("SELECT 1");
-    console.log("Database connection successful.");
+    console.log("Primary database connection successful.");
+
+    if (readReplicaMode) {
+      if (!replicaReadPool) {
+        throw new Error(
+          "Read-replica mode requires READ_REPLICA_ENABLED=true.",
+        );
+      }
+
+      const replicaState = await replicaReadPool.query(
+        "SELECT pg_is_in_recovery() AS is_replica",
+      );
+      if (replicaState.rows[0]?.is_replica !== true) {
+        throw new Error("Configured read database is not in recovery mode.");
+      }
+      console.log("Read replica connection successful and in recovery mode.");
+      console.log(
+        `Pool split: primary=${env.dbPoolPrimaryMax}, replica=${env.dbPoolReplicaMax}; feed reads=${env.primaryReadPercent}% primary / ${100 - env.primaryReadPercent}% replica; cache TTL=${env.feedCacheTtlMs}ms.`,
+      );
+    }
 
     await app.listen({
       port,
@@ -101,8 +120,15 @@ function startCluster(): void {
 }
 
 const clusterMode = process.argv.includes("--cluster");
+const readReplicaMode = process.argv.includes("--read-replica");
 
-if (clusterMode && cluster.isPrimary) {
+if (clusterMode && readReplicaMode) {
+  throw new Error(
+    "Cluster mode and read-replica mode are separate test modes.",
+  );
+} else if (readReplicaMode) {
+  void start(env.replicaTestPort, true);
+} else if (clusterMode && cluster.isPrimary) {
   startCluster();
 } else {
   void start(clusterMode ? env.clusterPort : env.port);

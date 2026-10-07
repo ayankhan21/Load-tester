@@ -1,5 +1,5 @@
 const { appendFileSync } = require("node:fs");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const { join } = require("node:path");
 
 require("dotenv").config();
@@ -21,8 +21,8 @@ for (let index = 0; index < inputArgs.length; index += 1) {
   }
 }
 
-if (mode !== "single" && mode !== "cluster") {
-  console.error("Mode must be either 'single' or 'cluster'.");
+if (mode !== "single" && mode !== "cluster" && mode !== "replica") {
+  console.error("Mode must be 'single', 'cluster' or 'replica'.");
   process.exit(1);
 }
 
@@ -51,7 +51,23 @@ function formatTable(title, rows) {
 const port =
   mode === "cluster"
     ? (process.env.CLUSTER_PORT ?? "3001")
-    : (process.env.PORT ?? "3000");
+    : mode === "replica"
+      ? (process.env.REPLICA_TEST_PORT ?? "3002")
+      : (process.env.PORT ?? "3000");
+
+if (mode === "replica") {
+  console.log("Starting the read replica container...");
+  const replicaUp = spawnSync(
+    "docker",
+    ["compose", "--profile", "read-replica", "up", "-d", "--wait", "postgres-replica"],
+    { stdio: "inherit" },
+  );
+  if (replicaUp.error || replicaUp.status !== 0) {
+    console.error("Unable to start the read replica container.");
+    process.exit(1);
+  }
+}
+const poolMax = Number(process.env.DB_POOL_MAX ?? 20);
 const runDate = new Date();
 const dateSuffix = `${runDate.getDate()}-${runDate.getMonth() + 1}-${runDate.getFullYear()}`;
 const outputPath = join(process.cwd(), `traffic-metrics-${dateSuffix}.txt`);
@@ -119,6 +135,8 @@ child.on("close", (code, signal) => {
 
   try {
     const metrics = JSON.parse(match[1]);
+    // The server reports HIT/MISS only while the cache is on (BYPASS when off).
+    const cacheEnabled = metrics.feedCacheHits + metrics.feedCacheMisses > 0;
     const report = formatTable("k6 traffic benchmark", [
       ["Timestamp", new Date().toISOString()],
       ["Mode", mode],
@@ -127,6 +145,31 @@ child.on("close", (code, signal) => {
       ["Virtual users", optionValue("vus", "20")],
       ["Duration", optionValue("duration", "30s")],
       ["DB pool max", process.env.DB_POOL_MAX ?? "20"],
+      ...(mode === "replica"
+        ? [
+            [
+              "Pool split (primary/replica)",
+              `${process.env.DB_POOL_PRIMARY_MAX ?? poolMax - Math.round(poolMax * 0.6)}/${process.env.DB_POOL_REPLICA_MAX ?? Math.round(poolMax * 0.6)}`,
+            ],
+            [
+              "Configured feed read split (primary %)",
+              process.env.PRIMARY_READ_PERCENT ?? "30",
+            ],
+            ["Feed reads from primary", String(metrics.feedPrimaryReads)],
+            ["Feed reads from replica", String(metrics.feedReplicaReads)],
+            [
+              "Feed reads from replica (%)",
+              metrics.feedReplicaPercent.toFixed(2),
+            ],
+          ]
+        : []),
+      [
+        "Cache strategy",
+        cacheEnabled
+          ? "Full-feed response cache (process-local)"
+          : "Disabled (--no-cache)",
+      ],
+      ["Cache TTL (ms)", cacheEnabled ? "10000" : "0"],
       ["Total requests", String(metrics.totalRequests)],
       ["Throughput (RPS)", metrics.throughputRps.toFixed(2)],
       ["Average latency (ms)", metrics.avgMs.toFixed(2)],
@@ -141,6 +184,9 @@ child.on("close", (code, signal) => {
       ["Follow requests", String(metrics.followRequests)],
       ["Like requests", String(metrics.likeRequests)],
       ["Post requests", String(metrics.postRequests)],
+      ["Feed cache hits", String(metrics.feedCacheHits)],
+      ["Feed cache misses", String(metrics.feedCacheMisses)],
+      ["Feed cache hit (%)", metrics.feedCacheHitPercent.toFixed(2)],
       [
         "Failed status counts",
         Object.entries(metrics.failedStatusCounts)

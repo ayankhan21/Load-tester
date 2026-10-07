@@ -4,19 +4,68 @@ services:
     container_name: social-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: social
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
+      POSTGRES_DB: ${DB_NAME:-social}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    command:
+      [
+        "postgres",
+        "-c",
+        "shared_preload_libraries=pg_stat_statements",
+        "-c",
+        "listen_addresses=*",
+        "-c",
+        "wal_level=replica",
+        "-c",
+        "max_wal_senders=10",
+        "-c",
+        "wal_keep_size=256MB",
+        "-c",
+        "hba_file=/etc/postgresql/pg_hba.conf",
+      ]
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./scripts/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 12
+
+  postgres-replica:
+    image: postgres:16
+    container_name: social-postgres-replica
+    profiles: ["read-replica"]
+    user: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      POSTGRES_DB: ${DB_NAME:-social}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      REPLICATION_USER: ${DB_USER:-postgres}
+      REPLICATION_PASSWORD: ${DB_PASSWORD:-postgres}
+      PRIMARY_HOST: postgres
+      PRIMARY_PORT: 5432
+    entrypoint: ["bash", "/usr/local/bin/replica-entrypoint.sh"]
+    ports:
+      - "127.0.0.1:${READ_REPLICA_PORT:-5434}:5432"
+    volumes:
+      - replica_data:/var/lib/postgresql/data
+      - ./scripts/replica-entrypoint.sh:/usr/local/bin/replica-entrypoint.sh:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB} && test \"$$(psql -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB} -Atc 'SELECT pg_is_in_recovery()')\" = t",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
 
   k6:
     image: grafana/k6:0.54.0
@@ -37,3 +86,5 @@ services:
 
 volumes:
   postgres_data:
+  replica_data:
+    name: social-load-lab-replica-data

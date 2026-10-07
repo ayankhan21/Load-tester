@@ -19,6 +19,10 @@ const actionRequests = {
   like: new Counter("like_requests"),
   post: new Counter("post_requests"),
 };
+const feedCacheHits = new Counter("feed_cache_hits");
+const feedCacheMisses = new Counter("feed_cache_misses");
+const feedPrimaryReads = new Counter("feed_primary_reads");
+const feedReplicaReads = new Counter("feed_replica_reads");
 const failedHttpStatusRequests = {};
 for (let statusCode = 400; statusCode < 600; statusCode += 1) {
   failedHttpStatusRequests[statusCode] = new Counter(
@@ -38,6 +42,14 @@ function randomUserId() {
   return randomInt(1, userCount);
 }
 
+function getResponseHeader(response, headerName) {
+  const normalizedName = headerName.toLowerCase();
+  const header = Object.entries(response.headers).find(
+    ([name]) => name.toLowerCase() === normalizedName,
+  );
+  return header?.[1];
+}
+
 function sendRequest(action, method, path, body) {
   actionRequests[action].add(1);
   const params = {
@@ -53,6 +65,22 @@ function sendRequest(action, method, path, body) {
     failedNetworkRequests.add(1);
   } else if (response.status >= 400 && response.status < 600) {
     failedHttpStatusRequests[response.status]?.add(1);
+  }
+
+  if (action === "feed") {
+    const cacheState = getResponseHeader(response, "x-feed-cache");
+    if (cacheState === "HIT") {
+      feedCacheHits.add(1);
+    } else if (cacheState === "MISS") {
+      feedCacheMisses.add(1);
+    }
+
+    const feedSource = getResponseHeader(response, "x-feed-source");
+    if (feedSource === "primary") {
+      feedPrimaryReads.add(1);
+    } else if (feedSource === "replica") {
+      feedReplicaReads.add(1);
+    }
   }
 
   check(
@@ -122,6 +150,12 @@ export function handleSummary(data) {
   if (networkFailures > 0) {
     failedStatusCounts.network_error = networkFailures;
   }
+  const feedCacheHits = data.metrics.feed_cache_hits?.values?.count ?? 0;
+  const feedCacheMisses = data.metrics.feed_cache_misses?.values?.count ?? 0;
+  const feedCacheLookups = feedCacheHits + feedCacheMisses;
+  const feedPrimaryReads = data.metrics.feed_primary_reads?.values?.count ?? 0;
+  const feedReplicaReads = data.metrics.feed_replica_reads?.values?.count ?? 0;
+  const feedSourceTotal = feedPrimaryReads + feedReplicaReads;
   const summary = {
     totalRequests: requestMetrics.count ?? 0,
     throughputRps: requestMetrics.rate ?? 0,
@@ -138,6 +172,14 @@ export function handleSummary(data) {
     likeRequests: actionCount("like"),
     postRequests: actionCount("post"),
     failedStatusCounts,
+    feedCacheHits,
+    feedCacheMisses,
+    feedCacheHitPercent:
+      feedCacheLookups > 0 ? (feedCacheHits / feedCacheLookups) * 100 : 0,
+    feedPrimaryReads,
+    feedReplicaReads,
+    feedReplicaPercent:
+      feedSourceTotal > 0 ? (feedReplicaReads / feedSourceTotal) * 100 : 0,
   };
 
   return {

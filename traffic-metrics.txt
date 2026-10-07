@@ -1,3 +1,5 @@
+cacheStrategy=none; all legacy natural-flow and k6 entries in this file predate server caching.
+
 Natural-flow traffic benchmark
 durationMs=60000
 vus=100

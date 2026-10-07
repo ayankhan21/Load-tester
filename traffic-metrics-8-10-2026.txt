@@ -2,6 +2,7 @@
 k6 traffic benchmark
 +---------------------------+--------------------------+
 | Timestamp                 | 2026-10-07T18:45:41.229Z |
+cacheStrategy=full-feed-response-in-process;ttl=5000ms
 | Mode                      | single                   |
 | Workload                  | stable user per VU       |
 | Virtual users             | 500                      |
@@ -30,6 +31,7 @@ k6 traffic benchmark
 k6 traffic benchmark
 +----------------------+----------------------------------------+
 | Timestamp            | 2026-10-07T18:51:55.493Z               |
+cacheStrategy=none
 | Mode                 | single                                 |
 | Workload             | random user per action                 |
 | Configured mix       | feed 80%, follow 5%, like 10%, post 5% |
@@ -55,6 +57,7 @@ k6 traffic benchmark
 k6 traffic benchmark
 +----------------------+----------------------------------------+
 | Timestamp            | 2026-10-07T18:57:36.352Z               |
+cacheStrategy=none
 | Mode                 | single                                 |
 | Workload             | random user per action                 |
 | Configured mix       | feed 80%, follow 5%, like 10%, post 5% |
@@ -77,3 +80,199 @@ k6 traffic benchmark
 | Post requests        | 333                                    |
 | Failed status counts | 400:346, 409:2, network_error:424      |
 +----------------------+----------------------------------------+
+
+k6 traffic benchmark
++----------------------------+----------------------------------------+
+| Timestamp                  | 2026-10-07T19:02:47.351Z               |
+cacheStrategy=per-author-posts-in-process;ttl=300000ms
+| Mode                       | single                                 |
+| Workload                   | random user per action                 |
+| Configured mix             | feed 80%, follow 5%, like 10%, post 5% |
+| Virtual users              | 2000                                   |
+| Duration                   | 10s                                    |
+| DB pool max                | 50                                     |
+| Author-post cache TTL (ms) | 300000                                 |
+| Total requests             | 4444                                   |
+| Throughput (RPS)           | 220.32                                 |
+| Average latency (ms)       | 5565.87                                |
+| p50 latency (ms)           | 6727.29                                |
+| p95 latency (ms)           | 10000.42                               |
+| Max latency (ms)           | 11676.23                               |
+| Failed requests            | 1178                                   |
+| Failed (%)                 | 26.51                                  |
+| Checks passed              | 3266                                   |
+| Checks failed              | 1178                                   |
+| Feed requests              | 3513                                   |
+| Follow requests            | 238                                    |
+| Like requests              | 462                                    |
+| Post requests              | 231                                    |
+| Author-post cache hits     | 0                                      |
+| Author-post cache misses   | 0                                      |
+| Author-post cache hit (%)  | 0.00                                   |
+| Failed status counts       | 400:197, 409:2, network_error:979      |
++----------------------------+----------------------------------------+
+
+k6 traffic benchmark
++----------------------------+----------------------------------------+
+| Timestamp                  | 2026-10-07T19:04:02.629Z               |
+cacheStrategy=per-author-posts-in-process;ttl=300000ms
+| Mode                       | single                                 |
+| Workload                   | random user per action                 |
+| Configured mix             | feed 80%, follow 5%, like 10%, post 5% |
+| Virtual users              | 20                                     |
+| Duration                   | 3s                                     |
+| DB pool max                | 50                                     |
+| Author-post cache TTL (ms) | 300000                                 |
+| Total requests             | 86                                     |
+| Throughput (RPS)           | 19.85                                  |
+| Average latency (ms)       | 36.54                                  |
+| p50 latency (ms)           | 16.19                                  |
+| p95 latency (ms)           | 152.01                                 |
+| Max latency (ms)           | 174.21                                 |
+| Failed requests            | 6                                      |
+| Failed (%)                 | 6.98                                   |
+| Checks passed              | 80                                     |
+| Checks failed              | 6                                      |
+| Feed requests              | 66                                     |
+| Follow requests            | 6                                      |
+| Like requests              | 12                                     |
+| Post requests              | 2                                      |
+| Author-post cache hits     | 256                                    |
+| Author-post cache misses   | 1068                                   |
+| Author-post cache hit (%)  | 19.34                                  |
+| Failed status counts       | 400:6                                  |
++----------------------------+----------------------------------------+
+
+k6 traffic benchmark
++----------------------------+----------------------------------------+
+| Timestamp                  | 2026-10-07T19:04:55.674Z               |
+cacheStrategy=per-author-posts-in-process;ttl=300000ms
+| Mode                       | single                                 |
+| Workload                   | random user per action                 |
+| Configured mix             | feed 80%, follow 5%, like 10%, post 5% |
+| Virtual users              | 2000                                   |
+| Duration                   | 10s                                    |
+| DB pool max                | 50                                     |
+| Author-post cache TTL (ms) | 300000                                 |
+| Total requests             | 3810                                   |
+| Throughput (RPS)           | 123.27                                 |
+| Average latency (ms)       | 6555.72                                |
+| p50 latency (ms)           | 8294.55                                |
+| p95 latency (ms)           | 9421.43                                |
+| Max latency (ms)           | 9835.97                                |
+| Failed requests            | 199                                    |
+| Failed (%)                 | 5.22                                   |
+| Checks passed              | 3611                                   |
+| Checks failed              | 199                                    |
+| Feed requests              | 3019                                   |
+| Follow requests            | 196                                    |
+| Like requests              | 403                                    |
+| Post requests              | 192                                    |
+| Author-post cache hits     | 12305                                  |
+| Author-post cache misses   | 47704                                  |
+| Author-post cache hit (%)  | 20.51                                  |
+| Failed status counts       | 400:196, 409:2, network_error:1        |
++----------------------------+----------------------------------------+
+
+k6 traffic benchmark
++------------------------------+----------------------------------------+
+| Timestamp                    | 2026-10-07T19:09:58.353Z               |
+cacheStrategy=full-feed-response-in-process;ttl=10000ms
+| Mode                         | single                                 |
+| Workload                     | random user per action                 |
+| Configured mix               | feed 80%, follow 5%, like 10%, post 5% |
+| Virtual users                | 2000                                   |
+| Duration                     | 10s                                    |
+| DB pool max                  | 50                                     |
+| Feed response cache TTL (ms) | 10000                                  |
+| Total requests               | 7408                                   |
+| Throughput (RPS)             | 552.41                                 |
+| Average latency (ms)         | 2076.67                                |
+| p50 latency (ms)             | 2626.80                                |
+| p95 latency (ms)             | 3969.11                                |
+| Max latency (ms)             | 4429.92                                |
+| Failed requests              | 943                                    |
+| Failed (%)                   | 12.73                                  |
+| Checks passed                | 6465                                   |
+| Checks failed                | 943                                    |
+| Feed requests                | 5849                                   |
+| Follow requests              | 367                                    |
+| Like requests                | 789                                    |
+| Post requests                | 403                                    |
+| Feed cache hits              | 1189                                   |
+| Feed cache misses            | 4191                                   |
+| Feed cache hit (%)           | 22.10                                  |
+| Failed status counts         | 400:351, 409:1, network_error:591      |
++------------------------------+----------------------------------------+
+
+k6 traffic benchmark
++----------------------------------------+------------------------------------------+
+| Timestamp                              | 2026-10-07T19:48:37.770Z                 |
+| Mode                                   | replica                                  |
+| Workload                               | random user per action                   |
+| Configured mix                         | feed 80%, follow 5%, like 10%, post 5%   |
+| Virtual users                          | 2000                                     |
+| Duration                               | 10s                                      |
+| DB pool max                            | 50                                       |
+| Pool split (primary/replica)           | 20/30                                    |
+| Configured feed read split (primary %) | 30                                       |
+| Feed reads from primary                | 1649                                     |
+| Feed reads from replica                | 3836                                     |
+| Feed reads from replica (%)            | 69.94                                    |
+| Cache strategy                         | Full-feed response cache (process-local) |
+| Cache TTL (ms)                         | 10000                                    |
+| Total requests                         | 7498                                     |
+| Throughput (RPS)                       | 187.49                                   |
+| Average latency (ms)                   | 1982.56                                  |
+| p50 latency (ms)                       | 1657.77                                  |
+| p95 latency (ms)                       | 4919.58                                  |
+| Max latency (ms)                       | 6046.78                                  |
+| Failed requests                        | 1003                                     |
+| Failed (%)                             | 13.38                                    |
+| Checks passed                          | 6495                                     |
+| Checks failed                          | 1003                                     |
+| Feed requests                          | 6008                                     |
+| Follow requests                        | 387                                      |
+| Like requests                          | 757                                      |
+| Post requests                          | 346                                      |
+| Feed cache hits                        | 1235                                     |
+| Feed cache misses                      | 4250                                     |
+| Feed cache hit (%)                     | 22.52                                    |
+| Failed status counts                   | 400:351, network_error:652               |
++----------------------------------------+------------------------------------------+
+
+k6 traffic benchmark
++----------------------------------------+----------------------------------------+
+| Timestamp                              | 2026-10-07T19:54:50.116Z               |
+| Mode                                   | replica                                |
+| Workload                               | random user per action                 |
+| Configured mix                         | feed 80%, follow 5%, like 10%, post 5% |
+| Virtual users                          | 2000                                   |
+| Duration                               | 10s                                    |
+| DB pool max                            | 50                                     |
+| Pool split (primary/replica)           | 20/30                                  |
+| Configured feed read split (primary %) | 30                                     |
+| Feed reads from primary                | 1349                                   |
+| Feed reads from replica                | 3131                                   |
+| Feed reads from replica (%)            | 69.89                                  |
+| Cache strategy                         | Disabled (--no-cache)                  |
+| Cache TTL (ms)                         | 0                                      |
+| Total requests                         | 7050                                   |
+| Throughput (RPS)                       | 176.96                                 |
+| Average latency (ms)                   | 2325.13                                |
+| p50 latency (ms)                       | 2543.63                                |
+| p95 latency (ms)                       | 4852.90                                |
+| Max latency (ms)                       | 5417.28                                |
+| Failed requests                        | 1658                                   |
+| Failed (%)                             | 23.52                                  |
+| Checks passed                          | 5392                                   |
+| Checks failed                          | 1658                                   |
+| Feed requests                          | 5595                                   |
+| Follow requests                        | 352                                    |
+| Like requests                          | 747                                    |
+| Post requests                          | 356                                    |
+| Feed cache hits                        | 0                                      |
+| Feed cache misses                      | 0                                      |
+| Feed cache hit (%)                     | 0.00                                   |
+| Failed status counts                   | 400:295, network_error:1363            |
++----------------------------------------+----------------------------------------+

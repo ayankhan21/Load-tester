@@ -1,6 +1,7 @@
 
 k6 traffic benchmark
 timestamp=2026-10-07T16:58:25.688Z
+cacheStrategy=none
 mode=single
 vus=5000
 duration=30s
@@ -46,6 +47,7 @@ apiCpuNote=CPU averages span the full sampling window, including k6 graceful-sto
 
 k6 traffic benchmark
 timestamp=2026-10-07T17:43:20.150Z
+cacheStrategy=none
 mode=single
 vus=5000
 duration=30s
@@ -96,6 +98,7 @@ postRunDbConnections=6 after load drained
 k6 traffic benchmark
 +----------------------+--------------------------+
 | Timestamp            | 2026-10-07T17:58:36.700Z |
+cacheStrategy=full-feed-response-in-process;ttl=5000ms
 | Mode                 | single                   |
 | Workload             | stable user per VU       |
 | Virtual users        | 10                       |
@@ -121,6 +124,7 @@ k6 traffic benchmark
 k6 traffic benchmark
 +---------------------------+--------------------------+
 | Timestamp                 | 2026-10-07T17:59:27.552Z |
+cacheStrategy=full-feed-response-in-process;ttl=5000ms
 | Mode                      | single                   |
 | Workload                  | stable user per VU       |
 | Virtual users             | 10                       |
@@ -149,6 +153,7 @@ k6 traffic benchmark
 k6 traffic benchmark
 +---------------------------+--------------------------+
 | Timestamp                 | 2026-10-07T18:04:46.790Z |
+cacheStrategy=none
 | Mode                      | single                   |
 | Workload                  | stable user per VU       |
 | Virtual users             | 500                      |

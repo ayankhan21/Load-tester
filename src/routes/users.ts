@@ -1,21 +1,34 @@
 import type { FastifyInstance } from "fastify";
-import { pool } from "../db/pool";
+import type { Pool } from "pg";
+import { env } from "../config/env";
+import { getFeedReadPool, pool } from "../db/pool";
+import {
+  FEED_CACHE_TTL_MS,
+  FeedResponse,
+  getCachedFeed,
+  invalidateUserFeeds,
+  setCachedFeed,
+} from "../cache/feed-cache";
 
 function conflict(message: string): Error & { statusCode: number } {
   return Object.assign(new Error(message), { statusCode: 409 });
 }
 
-async function ensureUserExists(userId: number): Promise<void> {
-  const userResult = await pool.query("SELECT id FROM users WHERE id = $1", [
-    userId,
-  ]);
+async function ensureUserExists(
+  userId: number,
+  queryPool: Pool = pool,
+): Promise<void> {
+  const userResult = await queryPool.query(
+    "SELECT id FROM users WHERE id = $1",
+    [userId],
+  );
   if (userResult.rowCount === 0) {
     throw Object.assign(new Error("User not found"), { statusCode: 404 });
   }
 }
 
 export async function usersRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/users/:userId/feed", async (request) => {
+  app.get("/users/:userId/feed", async (request, reply) => {
     const routeParams = request.params as { userId?: string };
     const query = request.query as { limit?: string; cursor?: string };
     const userId = Number(routeParams.userId);
@@ -43,9 +56,20 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    await ensureUserExists(userId);
+    const pageLimit = Math.min(limitRaw, 100);
+    const cacheKey = `feed:${userId}:limit=${pageLimit}:cursor=${cursorRaw ?? "first"}`;
+    const { pool: feedPool, source } = getFeedReadPool();
+    const cachedFeed = getCachedFeed(cacheKey, env.feedCacheTtlMs);
+    reply.header("x-feed-source", source);
+    if (cachedFeed !== undefined) {
+      reply.header("x-feed-cache", "HIT");
+      return cachedFeed;
+    }
 
-    const followingResult = await pool.query(
+    reply.header("x-feed-cache", env.feedCacheTtlMs > 0 ? "MISS" : "BYPASS");
+    await ensureUserExists(userId, feedPool);
+
+    const followingResult = await feedPool.query(
       "SELECT following_id FROM follows WHERE follower_id = $1 ORDER BY following_id ASC",
       [userId],
     );
@@ -55,10 +79,11 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     );
 
     if (followingIds.length === 0) {
-      return { posts: [], nextCursor: null };
+      const emptyFeed: FeedResponse = { posts: [], nextCursor: null };
+      setCachedFeed(cacheKey, emptyFeed, env.feedCacheTtlMs);
+      return emptyFeed;
     }
 
-    const pageLimit = Math.min(limitRaw, 100);
     const queryParameters: unknown[] = [followingIds];
     let queryText = `
       SELECT p.id, p.user_id AS "userId", u.username, p.content, p.created_at AS "createdAt"
@@ -75,7 +100,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     queryText += ` ORDER BY p.created_at DESC, p.id DESC LIMIT $${queryParameters.length + 1}`;
     queryParameters.push(pageLimit + 1);
 
-    const result = await pool.query(queryText, queryParameters);
+    const result = await feedPool.query(queryText, queryParameters);
     const posts = result.rows.slice(0, pageLimit).map((row) => ({
       id: Number(row.id),
       userId: Number(row.userId),
@@ -89,7 +114,9 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
         ? String(posts[posts.length - 1]?.id ?? null)
         : null;
 
-    return { posts, nextCursor };
+    const feed: FeedResponse = { posts, nextCursor };
+    setCachedFeed(cacheKey, feed, env.feedCacheTtlMs);
+    return feed;
   });
 
   app.post("/users/:userId/follow/:targetUserId", async (request, reply) => {
@@ -136,6 +163,8 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     if (result.rowCount === 0) {
       throw conflict("User is already following this user");
     }
+
+    invalidateUserFeeds(userId);
 
     return reply.code(201).send({
       followerId: userId,

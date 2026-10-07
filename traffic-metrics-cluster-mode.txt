@@ -1,4 +1,6 @@
 
+cacheStrategy=none; all cluster-mode entries in this file predate server caching.
+
 k6 traffic benchmark
 timestamp=2026-10-06T12:45:03.043Z
 mode=cluster
