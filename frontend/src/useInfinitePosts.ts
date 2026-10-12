@@ -13,6 +13,8 @@ import { cachePosts, getSession, saveSession } from "./postCache";
 // before they hit the bottom.
 const PREFETCH_AT = 15;
 const MAX_EMPTY_RETRIES = 5;
+// How far below the viewport the bottom sentinel counts as "near the end".
+const SENTINEL_MARGIN_PX = 1000;
 
 export function useInfinitePosts(
   storeKey: string,
@@ -111,5 +113,34 @@ export function useInfinitePosts(
     [done, loadMore],
   );
 
-  return { posts, loading, done, error, triggerId, attachTrigger, loadMore };
+  // Safety net for fast scrolling. The trigger above only fires when its post
+  // crosses into view, which a fast fling can skip, or which can happen while
+  // a request is in flight. A new observer reports the current state straight
+  // away, so re-creating it after every load re-checks "am I near the bottom?"
+  // instead of waiting for another crossing.
+  const [sentinel, setSentinel] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    // Stop on error so a failing request is not retried in a loop; the Retry
+    // button calls loadMore directly.
+    if (!sentinel || done || loading || error) return;
+    const watcher = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void loadMore();
+      },
+      { rootMargin: `0px 0px ${SENTINEL_MARGIN_PX}px 0px` },
+    );
+    watcher.observe(sentinel);
+    return () => watcher.disconnect();
+  }, [sentinel, posts.length, done, loading, error, loadMore]);
+
+  return {
+    posts,
+    loading,
+    done,
+    error,
+    triggerId,
+    attachTrigger,
+    sentinelRef: setSentinel,
+    loadMore,
+  };
 }

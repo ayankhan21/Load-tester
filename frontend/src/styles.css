@@ -125,6 +125,10 @@ input {
   border-radius: 12px;
   padding: 14px 16px;
   margin-bottom: 12px;
+  /* Skip layout/paint for off-screen posts. The size is a placeholder until
+     the browser has rendered the post once, then it remembers the real one. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 520px;
 }
 
 .post header {

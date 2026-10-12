@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Post } from "./api";
+import { AutoPlayVideo } from "./AutoPlayVideo";
 
 type Props = {
   post: Post;
@@ -48,19 +49,7 @@ export function PostCard({ post, liked, onLike, linkAuthor, triggerRef }: Props)
           loading="lazy"
         />
       )}
-      {post.videoUrl && (
-        <video
-          className="post-media video"
-          src={post.videoUrl}
-          width={640}
-          height={360}
-          controls
-          loop
-          muted
-          playsInline
-          preload="none"
-        />
-      )}
+      {post.videoUrl && <AutoPlayVideo src={post.videoUrl} />}
       <footer>
         <button
           className={liked ? "liked" : ""}

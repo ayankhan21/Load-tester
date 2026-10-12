@@ -1,0 +1,195 @@
+FINDINGS LOG
+============
+Running notes on every load test, dashboard test and UI test: what helped, what
+did not, and what is still unknown. Append new entries at the bottom; do not
+rewrite old ones (add a correction entry instead).
+
+Entry template:
+  [YYYY-MM-DD] <area> - <one-line title>
+  Setup:     data size, mode, VUs, pool, cache, anything that changes the result
+  Result:    the numbers
+  Helped:    ...
+  Did not:   ...
+  Caveats / open questions: ...
+
+Sources for the first entries: loop-metrics.txt, traffic-metrics*.txt (all in
+this repo), plus the DevTools profile from the 2026-10-13 UI session.
+
+
+------------------------------------------------------------------------------
+[2026-10-05] API / in-process harness - first social-mix benchmark
+Source: loop-metrics.txt
+Setup:  scripts/load-test.ts, mixed feed/post/like/follow, concurrency 10-500,
+        no server cache.
+Result: throughput rose to 1052 rps at concurrency 200 (avg 178 ms, p95 267 ms),
+        then fell: 920 rps at 500 (avg 509 ms, p95 770 ms).
+        About 9-10% of requests failed at every level (HTTP 400).
+Helped: nothing yet; this is the baseline.
+Did not: past ~200 concurrent, more load only added latency.
+Caveats: the 400s are consistent at every concurrency level, so they look like a
+        request-shape problem, not load. See the 2026-10-12 follow-400 entry.
+
+
+------------------------------------------------------------------------------
+[2026-10-06] k6 flat suite - single vs cluster mode (no server cache)
+Source: traffic-metrics.txt (legacy), traffic-metrics-cluster-mode.txt
+Setup:  60s flat runs, 80/5/10/5 mix, single process (:3000) vs cluster (:3001).
+Result (RPS / p95 ms):
+          VUs    single            cluster
+          100    104.96 / 15.72    112.32 / 16.27
+          200    153.73 / 25.78    218.26 / 23.24
+          500    335.61 / 272.33   321.43 / 293.06
+         1000    363.70 / 1353.86  356.43 / 2840.38
+         2000    382.05 / 3702.29  373.87 / 5174.83
+         5000    446.10 / 10708.5  427.54 / 11988.2
+        Failure rate: ~8% up to 1000 VUs, ~10-12% at 2000, ~22.5% at 5000.
+Helped: cluster at 200 VUs: +42% RPS, slightly lower p95.
+Did not: cluster gave no gain from 500 VUs up and had clearly worse p95 at
+        1000+ VUs (2840 vs 1354 ms at 1000).
+Caveats: the database is the shared bottleneck, so more Node processes cannot
+        add throughput; cluster splits the same DB pool across workers.
+        The ~8% failures are consistent across VU counts (same pattern as the
+        10-05 run); probably the same follow-400 cause, but not verified for
+        these older files.
+
+
+------------------------------------------------------------------------------
+[2026-10-07/08] k6 - cache on/off and read replica at 2000 VUs, 10s runs
+Source: traffic-metrics-7-10-2026.txt, traffic-metrics-8-10-2026.txt
+Result (2000 VUs, 10s, random user per action):
+        single, no cache: p95 3.6-10.0 s, 5-26% failed (network errors
+        dominate), run-to-run spread is very large.
+        single, 10s feed cache: 552 RPS (reported), cache hit 22%, p95 3.97 s.
+        replica + cache:       p95 4.92 s, 13.4% failed, hit 22.5%.
+        replica, no cache:     p95 4.85 s, 23.5% failed, hit 0%.
+Helped: the cache lowered failures on the replica run (13.4% vs 23.5%).
+Did not: the replica did not improve p95 or throughput at this load; cached vs
+        uncached replica RPS was 187 vs 177, within noise.
+Caveats: 10s runs at 2000 VUs are mostly ramp-up; hard to compare. Prefer the
+        120s staged suite below.
+
+
+------------------------------------------------------------------------------
+[2026-10-12] k6 staged suite - follow 400s fixed, then 500/2000 VU runs
+Source: traffic-metrics-12-10-2026.txt
+Setup:  120s staged suite (ramp, peak, fluctuate, ramp down), mix feed 70 /
+        follow 15 / like 10 / post 5, 1-5s think time, 10s feed cache, /feed.
+Result: before the fix (500 VUs): ~15% failed, all HTTP 400 (2041 of 13914).
+        after the fix (2000 VUs): 0.07-0.09% failed, only 409s (a user
+        following someone twice or liking twice), which are expected.
+        2000 VU runs: 467-474 RPS, p50 8-12 ms, p95 ranged 45.8 / 111 / 164 /
+        243 / 268 ms across five runs, max ~460-900 ms.
+        Feed cache hit rate: ~15% at 500 VUs, ~41% at 2000 VUs.
+Helped: the fix in commit e2e98e9 removed the 400s (Fastify rejects an empty
+        body sent as application/json; follow requests now send no content-type).
+        Earlier files show similar steady ~8-15% failures, probably the same
+        cause, but their failure breakdown was not recorded, so unconfirmed.
+Did not: DB pool 17 vs 50 made no consistent difference at 2000 VUs.
+        Pool 50 runs: p95 45.8 and 164 ms. Pool 17 runs: 243, 111, 268 ms.
+        The spread within one setting is as big as the spread between them.
+Caveats: p95 varies about 6x between identical setups, so one run proves
+        nothing. Use several runs and compare medians.
+        The old numbers above were taken on the original dataset and with the
+        in-memory cache starting cold or warm unpredictably; restart the API
+        between runs.
+
+
+------------------------------------------------------------------------------
+[2026-10-12] Data - dataset state before and after this UI session
+Setup:  README says 5,000 users / 50,000 posts, but the DB held about 21,000
+        users and 397,160 posts before this session (derived: current counts
+        minus the 5,000 users / 50,000 posts the seed added).
+        scripts/traffic-k6.js hard-codes userCount=5000 and postCount=50000, so
+        k6 only ever hits users 1-5000.
+Now:    26,000 users, 447,160 posts, ~638k follows, ~1.52M likes.
+        Database 500 MB (posts table 132 MB; likes + its two indexes ~200 MB);
+        Docker volume load-tester_postgres_data 1.27 GB (also WAL and bloat
+        from the media backfill's 223,580 updates). Replica volume 389 MB.
+Posts:  half images, half videos, stored as URLs only (picsum.photos for
+        images, imgsrc.pub for videos). Even post id = video.
+Caveats: no k6 run has been made on the 447k-post data yet. The old results are
+        not directly comparable to the new data size.
+
+
+------------------------------------------------------------------------------
+[2026-10-12] Data quality - reported throughput in older files is unreliable
+Source: traffic-metrics-7-10-2026.txt, traffic-metrics-8-10-2026.txt
+Result: reported RPS does not equal total requests / duration in several rows:
+          7-10  500 VUs 30s:  computed 535.8, reported 267.92
+          8-10  500 VUs 30s:  computed 555.7, reported 29.57
+          8-10  2000 VUs 10s: computed 616.3 / 656.7, reported 438.18 / 164.19
+          12-10 2000 VUs 120s: computed 483.8, reported 467.92 (close, fine)
+Meaning: trust request counts and latency in the 7-10 and 8-10 files; the
+        throughput column in those entries looks wrong (likely computed over a
+        different time window). The 12-10 file looks consistent.
+Open:   find where run-k6.js computes RPS for the early file format, and decide
+        whether to fix it or mark those rows as invalid.
+
+
+------------------------------------------------------------------------------
+[2026-10-12] API - /feed pagination bug and the separate /home-feed route
+Setup:  seed gives posts random created_at over 365 days, unrelated to id.
+        /feed sorts by created_at DESC but pages by id < cursor.
+Result: pages can repeat or skip posts. It is hidden on recent posts (the
+        traffic-test posts happen to be in id order), so it looked fine.
+Helped: new GET /users/:id/home-feed (keyset on created_at + id, opaque cursor,
+        no server cache). Walking user 1 end to end: 62 pages, 1222 posts,
+        1222 unique, strictly newest-first. A bad cursor returns 400.
+Did not: nothing tried and discarded.
+Caveats: /feed is untouched on purpose so the k6 numbers stay comparable.
+        /home-feed has not been load tested. It does no caching, so every call
+        hits the primary DB: expect it to look worse than /feed under load.
+
+
+------------------------------------------------------------------------------
+[2026-10-13] UI - 5-minute per-post cache, paging, media loading
+Setup:  React + Vite app in frontend/, proxy /api to 127.0.0.1:3000.
+Helped:
+  - Pages of 20; next page requested when the 15th post of the latest page is
+    visible, so it arrives before the user hits the bottom.
+  - Client keeps each post for 5 minutes. Going to a profile and back restores
+    the feed and scroll position without refetching.
+  - Videos: preload="none" at first, then the load starts ~1500px before the
+    video is on screen (so it is ready on arrival), and play/pause follows
+    visibility. Images use loading="lazy" with fixed aspect ratios, so layout
+    does not jump (CLS 0 in the profile below).
+  - content-visibility: auto on posts (skip layout/paint off-screen).
+Did not:
+  - Plain preload="none": videos only began loading when they reached the
+    screen, which showed as a start delay. Replaced by the lookahead above.
+Caveats / open:
+  - Not measured: how much content-visibility helped. No before/after was taken.
+  - List virtualization not implemented (adds a dependency and would unmount
+    preloaded videos). Revisit only if a profile of a very long feed shows jank.
+  - Image and video bytes are served by third parties and are not part of any
+    load test; k6 only fetches the URLs.
+
+
+------------------------------------------------------------------------------
+[2026-10-13] UI - DevTools Performance profile, ~13 s of very fast scrolling
+Result: range 13.25 s. System 754 ms, Painting 399 ms, Rendering 372 ms,
+        Scripting 201 ms. First-party main-thread time 80.9 ms (localhost).
+        3rd party imgsrc.pub: 62.5 kB transferred. CLS 0. LCP and INP not
+        captured. JS heap 113 MB, fluctuating (normal GC plus video buffers).
+Helped: nothing to fix on performance; the main thread was mostly idle.
+Did not: n/a for performance.
+BUG FOUND: scrolling fast to the end sometimes did not load the next page; the
+        user had to scroll up and down again.
+  Cause: the next-page trigger watched one element (15th post of the latest
+        page) and only fired on a visibility change. A fast fling can skip it,
+        and a trigger that fires during an in-flight request is ignored.
+  Fix:  added a bottom sentinel (1000 px lookahead) that is re-checked after
+        every load, so being near the bottom triggers a load without a new
+        crossing. It stops on error, so a failing API is not hit in a loop.
+Open:   fix not yet confirmed in a browser. Re-test with repeated fast scrolls
+        to the bottom. Record memory after ~500 posts, and capture a profile
+        with and without content-visibility for a real comparison.
+
+
+------------------------------------------------------------------------------
+NEXT TESTS TO ADD (planned, not run)
+  1. /feed baseline on the 447k-post data (staged suite, 500 and 2000 VUs).
+  2. Same with USER_COUNT=26000 POST_COUNT=447160 so all data is used.
+  3. /home-feed scenario: page 1, then follow nextCursor for several pages.
+  4. Optionally compare /home-feed on primary vs replica.
+  Run each several times and restart the API between runs (cold cache).

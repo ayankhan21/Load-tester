@@ -18,8 +18,16 @@ export function PostList({
   emptyText,
   linkAuthor,
 }: Props) {
-  const { posts, loading, done, error, triggerId, attachTrigger, loadMore } =
-    useInfinitePosts(storeKey, fetchPage);
+  const {
+    posts,
+    loading,
+    done,
+    error,
+    triggerId,
+    attachTrigger,
+    sentinelRef,
+    loadMore,
+  } = useInfinitePosts(storeKey, fetchPage);
   const { isLiked, markLiked } = useLiked(viewerId);
 
   const like = async (post: Post) => {
@@ -45,6 +53,7 @@ export function PostList({
           triggerRef={post.id === triggerId ? attachTrigger : undefined}
         />
       ))}
+      <div ref={sentinelRef} aria-hidden />
       {error && (
         <p className="status error">
           {error} <button onClick={() => void loadMore()}>Retry</button>
