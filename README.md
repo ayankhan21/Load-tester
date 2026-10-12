@@ -83,3 +83,21 @@ npm run seed -- --users=1000 --posts=10000
 - `POST /posts`
 - `POST /posts/:postId/like`
 - `POST /users/:userId/follow/:targetUserId`
+- `DELETE /users/:userId/follow/:targetUserId`
+- `GET /users/:userId?viewerId=` (profile, counts, `isFollowing`)
+- `GET /users/:userId/posts?limit=20&cursor=`
+- `GET /users/:userId/home-feed?limit=20&cursor=` (used by the frontend; keyset-paginated, uncached; `/feed` stays the load-test endpoint)
+
+## Frontend
+
+A small React + Vite app for exercising the API by hand: feed with infinite scroll, profile pages with follow/unfollow, and like on every post.
+
+```bash
+npm run dev                          # API on :3000 (terminal 1)
+cd frontend && npm install && npm run dev   # UI on http://localhost:5173 (terminal 2)
+```
+
+- Pages are 20 posts. The next page is requested when the 15th post of the latest page scrolls into view.
+- Each post is cached in the browser for 5 minutes; going back from a profile restores the feed and scroll position without refetching.
+- There is no auth: use the "Viewing as user #" box to pick who you are.
+- The dev server proxies `/api` to `http://127.0.0.1:3000`.

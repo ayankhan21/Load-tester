@@ -7,6 +7,7 @@ type Config = {
   follows: number;
   likes: number;
   seed?: number;
+  mediaOnly?: boolean;
 };
 
 function parseArgs(argv: string[]): Config {
@@ -42,10 +43,15 @@ function parseArgs(argv: string[]): Config {
       if (!Number.isFinite(parsed) || parsed < 0) {
         throw new Error(`Invalid value for --${option}: ${value}`);
       }
-      config[option as keyof Omit<Config, "seed">] = parsed;
+      config[option as "users" | "posts" | "follows" | "likes"] = parsed;
       if (arg.includes("=") === false) {
         i += 1;
       }
+      continue;
+    }
+
+    if (option === "media-only") {
+      config.mediaOnly = true;
       continue;
     }
 
@@ -66,6 +72,15 @@ function parseArgs(argv: string[]): Config {
 
   return config;
 }
+
+// URLs only, never downloaded, so the seed has no dependency on the external
+// services. Half the posts are videos: even post id = video, odd id = image.
+const IMAGE_URL_SQL = "'https://picsum.photos/seed/post-' || id || '/800/600'";
+const VIDEO_URL_SQL = "'https://imgsrc.pub/video/640x360?text=' || id";
+const MEDIA_SET_SQL = `image_url = CASE WHEN id % 2 = 1 THEN ${IMAGE_URL_SQL} END,
+       video_url = CASE WHEN id % 2 = 0 THEN ${VIDEO_URL_SQL} END`;
+const MEDIA_MISSING_SQL = `(id % 2 = 1 AND (image_url IS NULL OR video_url IS NOT NULL))
+       OR (id % 2 = 0 AND (video_url IS NULL OR image_url IS NOT NULL))`;
 
 function getBatchSize(target: number): number {
   if (target < 1_000) return 250;
@@ -160,22 +175,47 @@ async function insertPosts(
       row.content,
       row.createdAt,
     ]);
-    await pool.query(
-      `INSERT INTO posts (user_id, content, created_at) VALUES ${values}`,
+    const result = await pool.query(
+      `INSERT INTO posts (user_id, content, created_at) VALUES ${values} RETURNING id`,
       params,
     );
-
-    const result = await pool.query(
-      "SELECT id FROM posts ORDER BY id DESC LIMIT $1",
-      [batch.length],
+    const batchIds = result.rows.map((row) => Number(row.id));
+    await pool.query(
+      `UPDATE posts SET ${MEDIA_SET_SQL} WHERE id = ANY($1::bigint[])`,
+      [batchIds],
     );
-    postIds.push(...result.rows.map((row) => Number(row.id)));
+    postIds.push(...batchIds);
 
     inserted += batch.length;
     console.log(`Posts: ${Math.min(inserted, totalPosts)} / ${totalPosts}`);
   }
 
   return postIds;
+}
+
+// Brings every post in line with the media rule above (e.g. posts created
+// before the columns existed, or by the traffic tests). Idempotent; runs in id
+// ranges so it never holds one huge update.
+async function backfillMedia(): Promise<void> {
+  const bounds = await pool.query(
+    `SELECT MIN(id) AS lo, MAX(id) AS hi FROM posts WHERE ${MEDIA_MISSING_SQL}`,
+  );
+  if (bounds.rows[0].lo === null) {
+    return;
+  }
+
+  const step = 50_000;
+  const hi = Number(bounds.rows[0].hi);
+  let filled = 0;
+  for (let lo = Number(bounds.rows[0].lo); lo <= hi; lo += step) {
+    const result = await pool.query(
+      `UPDATE posts SET ${MEDIA_SET_SQL}
+       WHERE id >= $1 AND id < $2 AND (${MEDIA_MISSING_SQL})`,
+      [lo, lo + step],
+    );
+    filled += result.rowCount ?? 0;
+    console.log(`Post media backfilled: ${filled}`);
+  }
 }
 
 async function insertRelationships(
@@ -257,12 +297,18 @@ async function main(): Promise<void> {
     faker.seed(config.seed);
   }
 
-  const defaults: Required<Omit<Config, "seed">> = {
+  const defaults: Required<Omit<Config, "seed" | "mediaOnly">> = {
     users: 5_000,
     posts: 50_000,
     follows: 0,
     likes: 0,
   };
+
+  if (config.mediaOnly) {
+    await backfillMedia();
+    console.log("Media-only run complete; no users, posts, follows or likes added.");
+    return;
+  }
 
   if (config.follows === 0) {
     config.follows = Math.max(100_000, Math.round(config.users * 20));
@@ -278,6 +324,7 @@ async function main(): Promise<void> {
 
   const userIds = await insertUsers(config.users);
   const postIds = await insertPosts(userIds, config.posts);
+  await backfillMedia();
   await insertRelationships("follows", config.follows, userIds);
   await insertRelationships("likes", config.likes, userIds, postIds);
 

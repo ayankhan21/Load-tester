@@ -27,7 +27,165 @@ async function ensureUserExists(
   }
 }
 
+function parsePositiveInt(value: unknown, name: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw Object.assign(new Error(`${name} must be a positive integer`), {
+      statusCode: 400,
+    });
+  }
+  return parsed;
+}
+
 export async function usersRoutes(app: FastifyInstance): Promise<void> {
+  app.get("/users/:userId", async (request) => {
+    const params = request.params as { userId?: string };
+    const query = request.query as { viewerId?: string };
+    const userId = parsePositiveInt(params.userId, "userId");
+    const viewerId =
+      query.viewerId === undefined
+        ? null
+        : parsePositiveInt(query.viewerId, "viewerId");
+
+    const result = await pool.query(
+      `SELECT u.id,
+              u.username,
+              u.created_at AS "createdAt",
+              (SELECT COUNT(*) FROM posts WHERE user_id = u.id) AS "postCount",
+              (SELECT COUNT(*) FROM follows WHERE following_id = u.id) AS "followerCount",
+              (SELECT COUNT(*) FROM follows WHERE follower_id = u.id) AS "followingCount",
+              EXISTS (
+                SELECT 1 FROM follows
+                WHERE follower_id = $2::bigint AND following_id = u.id
+              ) AS "isFollowing"
+       FROM users u
+       WHERE u.id = $1`,
+      [userId, viewerId],
+    );
+
+    const row = result.rows[0];
+    if (!row) {
+      throw Object.assign(new Error("User not found"), { statusCode: 404 });
+    }
+
+    return {
+      id: Number(row.id),
+      username: row.username,
+      createdAt: row.createdAt,
+      postCount: Number(row.postCount),
+      followerCount: Number(row.followerCount),
+      followingCount: Number(row.followingCount),
+      isFollowing: row.isFollowing === true,
+    };
+  });
+
+  app.get("/users/:userId/posts", async (request) => {
+    const params = request.params as { userId?: string };
+    const query = request.query as { limit?: string; cursor?: string };
+    const userId = parsePositiveInt(params.userId, "userId");
+    const limit = Math.min(parsePositiveInt(query.limit ?? 20, "limit"), 100);
+    const cursor =
+      query.cursor === undefined
+        ? null
+        : parsePositiveInt(query.cursor, "cursor");
+
+    await ensureUserExists(userId);
+
+    const result = await pool.query(
+      `SELECT p.id, p.user_id AS "userId", u.username, p.content,
+              p.image_url AS "imageUrl", p.video_url AS "videoUrl", p.created_at AS "createdAt"
+       FROM posts p
+       JOIN users u ON u.id = p.user_id
+       WHERE p.user_id = $1 AND ($2::bigint IS NULL OR p.id < $2)
+       ORDER BY p.id DESC
+       LIMIT $3`,
+      [userId, cursor, limit + 1],
+    );
+
+    const posts = result.rows.slice(0, limit).map((row) => ({
+      id: Number(row.id),
+      userId: Number(row.userId),
+      username: row.username,
+      content: row.content,
+      imageUrl: row.imageUrl,
+      videoUrl: row.videoUrl,
+      createdAt: row.createdAt,
+    }));
+
+    return {
+      posts,
+      nextCursor:
+        result.rows.length > limit
+          ? String(posts[posts.length - 1].id)
+          : null,
+    };
+  });
+
+  // Frontend home feed. Separate from /feed (which the k6 suite measures) and
+  // paginated by (created_at, id) so pages never repeat or skip posts.
+  app.get("/users/:userId/home-feed", async (request) => {
+    const params = request.params as { userId?: string };
+    const query = request.query as { limit?: string; cursor?: string };
+    const userId = parsePositiveInt(params.userId, "userId");
+    const limit = Math.min(parsePositiveInt(query.limit ?? 20, "limit"), 100);
+
+    let cursorCreatedAt: string | null = null;
+    let cursorId: number | null = null;
+    if (query.cursor !== undefined) {
+      const [createdAt, id] = Buffer.from(query.cursor, "base64url")
+        .toString("utf8")
+        .split("|");
+      cursorId = Number(id);
+      if (
+        !createdAt ||
+        Number.isNaN(Date.parse(createdAt)) ||
+        !Number.isInteger(cursorId) ||
+        cursorId <= 0
+      ) {
+        throw Object.assign(new Error("cursor is invalid"), {
+          statusCode: 400,
+        });
+      }
+      cursorCreatedAt = createdAt;
+    }
+
+    await ensureUserExists(userId);
+
+    // created_at::text keeps microsecond precision, which a JS Date would lose.
+    const result = await pool.query(
+      `SELECT p.id, p.user_id AS "userId", u.username, p.content,
+              p.image_url AS "imageUrl", p.video_url AS "videoUrl",
+              p.created_at AS "createdAt", p.created_at::text AS "createdAtText"
+       FROM posts p
+       JOIN users u ON u.id = p.user_id
+       WHERE p.user_id IN (SELECT following_id FROM follows WHERE follower_id = $1)
+         AND ($2::timestamptz IS NULL OR (p.created_at, p.id) < ($2::timestamptz, $3::bigint))
+       ORDER BY p.created_at DESC, p.id DESC
+       LIMIT $4`,
+      [userId, cursorCreatedAt, cursorId, limit + 1],
+    );
+
+    const page = result.rows.slice(0, limit);
+    const last = page[page.length - 1];
+    return {
+      posts: page.map((row) => ({
+        id: Number(row.id),
+        userId: Number(row.userId),
+        username: row.username,
+        content: row.content,
+        imageUrl: row.imageUrl,
+      videoUrl: row.videoUrl,
+        createdAt: row.createdAt,
+      })),
+      nextCursor:
+        result.rows.length > limit && last
+          ? Buffer.from(`${last.createdAtText}|${last.id}`).toString(
+              "base64url",
+            )
+          : null,
+    };
+  });
+
   app.get("/users/:userId/feed", async (request, reply) => {
     const routeParams = request.params as { userId?: string };
     const query = request.query as { limit?: string; cursor?: string };
@@ -171,5 +329,34 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       followingId: targetUserId,
       message: "User followed",
     });
+  });
+
+  app.delete("/users/:userId/follow/:targetUserId", async (request) => {
+    const params = request.params as { userId?: string; targetUserId?: string };
+    const userId = parsePositiveInt(params.userId, "userId");
+    const targetUserId = parsePositiveInt(
+      params.targetUserId,
+      "targetUserId",
+    );
+
+    const result = await pool.query(
+      `DELETE FROM follows
+       WHERE follower_id = $1 AND following_id = $2`,
+      [userId, targetUserId],
+    );
+
+    if (result.rowCount === 0) {
+      throw Object.assign(new Error("User is not following this user"), {
+        statusCode: 404,
+      });
+    }
+
+    invalidateUserFeeds(userId);
+
+    return {
+      followerId: userId,
+      followingId: targetUserId,
+      message: "User unfollowed",
+    };
   });
 }
