@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { env } from "../config/env";
-import { getFeedReadPool, pool } from "../db/pool";
+import type { PoolClient } from "pg";
+import { getFeedReadPool, pool, withTransaction } from "../db/pool";
 import {
   FEED_CACHE_TTL_MS,
   FeedResponse,
@@ -37,6 +38,23 @@ function parsePositiveInt(value: unknown, name: string): number {
   return parsed;
 }
 
+// One statement updates both rows, so concurrent follows between the same
+// two users lock them in the same (index) order instead of crossing.
+async function adjustFollowCounters(
+  client: PoolClient,
+  followerId: number,
+  followingId: number,
+  delta: 1 | -1,
+): Promise<void> {
+  await client.query(
+    `UPDATE users SET
+       follower_count = follower_count + CASE WHEN id = $2 THEN $3::int ELSE 0 END,
+       following_count = following_count + CASE WHEN id = $1 THEN $3::int ELSE 0 END
+     WHERE id IN ($1, $2)`,
+    [followerId, followingId, delta],
+  );
+}
+
 export async function usersRoutes(app: FastifyInstance): Promise<void> {
   app.get("/users/:userId", async (request) => {
     const params = request.params as { userId?: string };
@@ -51,9 +69,9 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       `SELECT u.id,
               u.username,
               u.created_at AS "createdAt",
-              (SELECT COUNT(*) FROM posts WHERE user_id = u.id) AS "postCount",
-              (SELECT COUNT(*) FROM follows WHERE following_id = u.id) AS "followerCount",
-              (SELECT COUNT(*) FROM follows WHERE follower_id = u.id) AS "followingCount",
+              u.post_count AS "postCount",
+              u.follower_count AS "followerCount",
+              u.following_count AS "followingCount",
               EXISTS (
                 SELECT 1 FROM follows
                 WHERE follower_id = $2::bigint AND following_id = u.id
@@ -93,7 +111,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
 
     const result = await pool.query(
       `SELECT p.id, p.user_id AS "userId", u.username, p.content,
-              p.image_url AS "imageUrl", p.video_url AS "videoUrl", p.created_at AS "createdAt"
+              p.image_url AS "imageUrl", p.video_url AS "videoUrl", p.like_count AS "likeCount", p.created_at AS "createdAt"
        FROM posts p
        JOIN users u ON u.id = p.user_id
        WHERE p.user_id = $1 AND ($2::bigint IS NULL OR p.id < $2)
@@ -109,6 +127,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       content: row.content,
       imageUrl: row.imageUrl,
       videoUrl: row.videoUrl,
+      likeCount: Number(row.likeCount),
       createdAt: row.createdAt,
     }));
 
@@ -154,7 +173,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
     // created_at::text keeps microsecond precision, which a JS Date would lose.
     const result = await pool.query(
       `SELECT p.id, p.user_id AS "userId", u.username, p.content,
-              p.image_url AS "imageUrl", p.video_url AS "videoUrl",
+              p.image_url AS "imageUrl", p.video_url AS "videoUrl", p.like_count AS "likeCount",
               p.created_at AS "createdAt", p.created_at::text AS "createdAtText"
        FROM posts p
        JOIN users u ON u.id = p.user_id
@@ -175,6 +194,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
         content: row.content,
         imageUrl: row.imageUrl,
       videoUrl: row.videoUrl,
+      likeCount: Number(row.likeCount),
         createdAt: row.createdAt,
       })),
       nextCursor:
@@ -310,15 +330,21 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    const result = await pool.query(
-      `INSERT INTO follows (follower_id, following_id, created_at)
-       VALUES ($1, $2, NOW())
-       ON CONFLICT (follower_id, following_id) DO NOTHING
-       RETURNING follower_id AS "followerId", following_id AS "followingId"`,
-      [userId, targetUserId],
-    );
+    const followed = await withTransaction(async (client) => {
+      const result = await client.query(
+        `INSERT INTO follows (follower_id, following_id, created_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (follower_id, following_id) DO NOTHING`,
+        [userId, targetUserId],
+      );
+      if (result.rowCount === 0) {
+        return false;
+      }
+      await adjustFollowCounters(client, userId, targetUserId, 1);
+      return true;
+    });
 
-    if (result.rowCount === 0) {
+    if (!followed) {
       throw conflict("User is already following this user");
     }
 
@@ -339,13 +365,20 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       "targetUserId",
     );
 
-    const result = await pool.query(
-      `DELETE FROM follows
-       WHERE follower_id = $1 AND following_id = $2`,
-      [userId, targetUserId],
-    );
+    const unfollowed = await withTransaction(async (client) => {
+      const result = await client.query(
+        `DELETE FROM follows
+         WHERE follower_id = $1 AND following_id = $2`,
+        [userId, targetUserId],
+      );
+      if (result.rowCount === 0) {
+        return false;
+      }
+      await adjustFollowCounters(client, userId, targetUserId, -1);
+      return true;
+    });
 
-    if (result.rowCount === 0) {
+    if (!unfollowed) {
       throw Object.assign(new Error("User is not following this user"), {
         statusCode: 404,
       });

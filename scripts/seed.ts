@@ -8,6 +8,7 @@ type Config = {
   likes: number;
   seed?: number;
   mediaOnly?: boolean;
+  countersOnly?: boolean;
 };
 
 function parseArgs(argv: string[]): Config {
@@ -52,6 +53,11 @@ function parseArgs(argv: string[]): Config {
 
     if (option === "media-only") {
       config.mediaOnly = true;
+      continue;
+    }
+
+    if (option === "counters-only") {
+      config.countersOnly = true;
       continue;
     }
 
@@ -282,6 +288,40 @@ async function insertRelationships(
   }
 }
 
+// The seed inserts users, posts, follows and likes in bulk, bypassing the write
+// routes that keep the counter columns current, so recompute them from the
+// rows. Idempotent; also the repair step if a counter ever drifts.
+async function recomputeCounters(): Promise<void> {
+  await pool.query(
+    `UPDATE users u SET
+       follower_count = (SELECT COUNT(*) FROM follows WHERE following_id = u.id),
+       following_count = (SELECT COUNT(*) FROM follows WHERE follower_id = u.id),
+       post_count = (SELECT COUNT(*) FROM posts WHERE user_id = u.id)`,
+  );
+  console.log("User counters recomputed.");
+
+  const bounds = await pool.query(
+    "SELECT MIN(id) AS lo, MAX(id) AS hi FROM posts",
+  );
+  if (bounds.rows[0].lo === null) {
+    return;
+  }
+
+  const step = 50_000;
+  const hi = Number(bounds.rows[0].hi);
+  let changed = 0;
+  for (let lo = Number(bounds.rows[0].lo); lo <= hi; lo += step) {
+    const result = await pool.query(
+      `UPDATE posts p SET like_count = (SELECT COUNT(*) FROM likes WHERE post_id = p.id)
+       WHERE p.id >= $1 AND p.id < $2
+         AND p.like_count IS DISTINCT FROM (SELECT COUNT(*) FROM likes WHERE post_id = p.id)`,
+      [lo, lo + step],
+    );
+    changed += result.rowCount ?? 0;
+    console.log(`Post like counters corrected: ${changed}`);
+  }
+}
+
 async function getCount(
   tableName: "follows" | "likes" | "posts" | "users",
 ): Promise<number> {
@@ -297,7 +337,7 @@ async function main(): Promise<void> {
     faker.seed(config.seed);
   }
 
-  const defaults: Required<Omit<Config, "seed" | "mediaOnly">> = {
+  const defaults: Required<Omit<Config, "seed" | "mediaOnly" | "countersOnly">> = {
     users: 5_000,
     posts: 50_000,
     follows: 0,
@@ -307,6 +347,12 @@ async function main(): Promise<void> {
   if (config.mediaOnly) {
     await backfillMedia();
     console.log("Media-only run complete; no users, posts, follows or likes added.");
+    return;
+  }
+
+  if (config.countersOnly) {
+    await recomputeCounters();
+    console.log("Counters-only run complete; no rows added.");
     return;
   }
 
@@ -327,6 +373,7 @@ async function main(): Promise<void> {
   await backfillMedia();
   await insertRelationships("follows", config.follows, userIds);
   await insertRelationships("likes", config.likes, userIds, postIds);
+  await recomputeCounters();
 
   const usersCount = await getCount("users");
   const postsCount = await getCount("posts");

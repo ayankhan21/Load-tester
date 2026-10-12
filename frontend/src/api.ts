@@ -5,6 +5,7 @@ export type Post = {
   content: string;
   imageUrl: string | null;
   videoUrl: string | null;
+  likeCount: number;
   createdAt: string;
 };
 

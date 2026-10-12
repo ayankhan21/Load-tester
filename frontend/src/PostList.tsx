@@ -1,5 +1,6 @@
 import { api, ApiError, type Post, type PostPage } from "./api";
 import { PostCard } from "./PostCard";
+import { bumpLikeCount } from "./postCache";
 import { useInfinitePosts } from "./useInfinitePosts";
 import { useLiked } from "./useLiked";
 
@@ -30,14 +31,20 @@ export function PostList({
   } = useInfinitePosts(storeKey, fetchPage);
   const { isLiked, markLiked } = useLiked(viewerId);
 
-  const like = async (post: Post) => {
+  // Resolves true when this call added the like, false if it already existed.
+  const like = async (post: Post): Promise<boolean> => {
     try {
       await api.like(post.id, viewerId);
       markLiked(post.id);
+      bumpLikeCount(post.id);
+      return true;
     } catch (e) {
       // 409 means this viewer already liked it; reflect that.
-      if (e instanceof ApiError && e.status === 409) markLiked(post.id);
-      else throw e;
+      if (e instanceof ApiError && e.status === 409) {
+        markLiked(post.id);
+        return false;
+      }
+      throw e;
     }
   };
 

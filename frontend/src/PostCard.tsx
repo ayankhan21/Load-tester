@@ -5,18 +5,20 @@ import { AutoPlayVideo } from "./AutoPlayVideo";
 type Props = {
   post: Post;
   liked: boolean;
-  onLike: () => Promise<void>;
+  onLike: () => Promise<boolean>;
   linkAuthor: boolean;
   triggerRef?: (node: HTMLElement | null) => void;
 };
 
 export function PostCard({ post, liked, onLike, linkAuthor, triggerRef }: Props) {
   const [busy, setBusy] = useState(false);
+  // Likes added from this card since it was rendered; post.likeCount is as fetched.
+  const [extra, setExtra] = useState(0);
 
   const handleLike = async () => {
     setBusy(true);
     try {
-      await onLike();
+      if (await onLike()) setExtra(1);
     } catch (e) {
       alert(e instanceof Error ? e.message : "Could not like post");
     } finally {
@@ -56,7 +58,7 @@ export function PostCard({ post, liked, onLike, linkAuthor, triggerRef }: Props)
           disabled={liked || busy}
           onClick={handleLike}
         >
-          {liked ? "♥ Liked" : "♡ Like"}
+          {liked ? "♥ Liked" : "♡ Like"} · {post.likeCount + extra}
         </button>
       </footer>
     </article>

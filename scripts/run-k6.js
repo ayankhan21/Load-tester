@@ -9,6 +9,7 @@ const inputArgs = process.argv.slice(2);
 const k6Args = [];
 let mode = "single";
 let suite = "flat";
+let note = "";
 
 for (let index = 0; index < inputArgs.length; index += 1) {
   const arg = inputArgs[index];
@@ -19,6 +20,8 @@ for (let index = 0; index < inputArgs.length; index += 1) {
     mode = arg.slice("--mode=".length);
   } else if (arg.startsWith("--suite=")) {
     suite = arg.slice("--suite=".length);
+  } else if (arg.startsWith("--note=")) {
+    note = arg.slice("--note=".length);
   } else {
     k6Args.push(arg);
   }
@@ -152,6 +155,7 @@ child.on("close", (code, signal) => {
     const cacheEnabled = metrics.feedCacheHits + metrics.feedCacheMisses > 0;
     const report = formatTable("k6 traffic benchmark", [
       ["Timestamp", new Date().toISOString()],
+      ...(note ? [["Notes", note]] : []),
       ["Mode", mode],
       ["Workload", "random user per action"],
       [

@@ -19,6 +19,15 @@ export function cachePosts(items: Post[]): void {
   for (const post of items) posts.set(post.id, { post, expiresAt });
 }
 
+// Keeps a cached post's like count in step with a like made in this session,
+// so restoring the list from the cache does not show a stale count.
+export function bumpLikeCount(id: number): void {
+  const entry = posts.get(id);
+  if (entry) {
+    entry.post = { ...entry.post, likeCount: entry.post.likeCount + 1 };
+  }
+}
+
 export function getSession(
   key: string,
 ): { posts: Post[]; nextCursor: string | null; scrollY: number } | undefined {

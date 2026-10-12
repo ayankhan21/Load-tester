@@ -187,6 +187,116 @@ Open:   fix not yet confirmed in a browser. Re-test with repeated fast scrolls
 
 
 ------------------------------------------------------------------------------
+[2026-10-13] Data / API - stored counters for follows, posts and likes
+Why:    profiles recomputed follower, following and post counts with COUNT(*)
+        subqueries on every view; cost grows with follower count.
+Change: users.follower_count / following_count / post_count and
+        posts.like_count (INTEGER NOT NULL DEFAULT 0). Follow, unfollow, create
+        post and like now run in one transaction with their counter update, and
+        change the counter only when a row was really inserted or deleted (a
+        duplicate follow/like returns 409 and does not double count). Follow
+        and unfollow update both user rows in one statement so crossing
+        follows lock rows in the same order. Profile reads the stored values;
+        /home-feed and /users/:id/posts return likeCount. /feed unchanged.
+        Seed recomputes counters at the end; `npm run seed -- --counters-only`
+        repairs them from the rows.
+Result: backfill on the existing data corrected user counters and ~259k post
+        like counts. After that, a full recount found 0 drifted users and 0
+        drifted posts, before, during and after 1,560 concurrent follows and
+        1,560 concurrent unfollows between 40 users in both directions: no
+        deadlocks, no drift. Duplicate follow/like -> 409, repeat unfollow ->
+        404, counters unchanged.
+Did not / unknown:
+  - Load impact NOT measured yet. The k6 follow (15%), like (10%) and post (5%)
+    actions are now transactions with extra UPDATEs, so staged-suite numbers
+    will differ from every earlier entry. Re-baseline before comparing.
+  - Hot rows: a user with very many followers serialises on its counter row.
+    Fine for this data (no celebrities); would need sharded counters otherwise.
+  - Counters can still drift if rows are changed outside the routes (manual SQL,
+    bulk seed); recompute with --counters-only.
+Side effect of the test: the concurrent unfollow step also removed 11 follow
+        rows that already existed between users 200-239 (not recorded, so not
+        restored). Seed data only.
+
+
+------------------------------------------------------------------------------
+[2026-10-12 21:26 UTC] k6 staged 2000 VUs - rerun of the 11:05 config after counters
+Source: traffic-metrics-13-10-2026.txt (runs after local midnight land in the
+        13th's file; this entry has a "Notes" row)
+Setup:  same as the 11:05 run: staged suite, max 2000 VUs, single mode, DB pool 17,
+        10s feed cache, API restarted (cold cache), /feed unchanged.
+        Differences: (1) counters updated inside follow/unfollow/post/like
+        transactions, (2) DB grew from ~21k users / ~397k posts to 26,000 users /
+        447,160 posts (k6 still only hits users 1-5000), (3) run later in the day.
+Result:               11:05 run      now
+        Total requests   58,050      47,216   (-19%)
+        RPS              467.92      380.65
+        avg latency ms    51.05      818.37
+        p50 ms            11.92       45.34
+        p95 ms           268.25     3417.46
+        max ms           723.69     4379.53
+        failed            0.09%       0.11%   (only 409s in both)
+        cache hit        40.84%      35.70%
+        Earlier same-config runs spread: RPS 467-474, avg 14-51 ms, p95 46-268 ms.
+        This run is far outside that spread (p95 ~13x the worst earlier run).
+Helped: no errors: failures are still only expected 409s, no 5xx, no deadlocks.
+Did not: latency and throughput got much worse; the p50 also rose (45 vs 12 ms),
+        so it is not just the write actions (they are 30% of requests).
+Ruled out: table bloat. After the run: 3,083 dead rows in posts, 2,428 in users;
+        autovacuum finished at 21:21, before the run.
+NOT attributed: the counters are one candidate (each follow now updates two
+        user rows, each like/post one more row), but this run cannot show that:
+        the dataset, the time of day and machine/Docker load also changed, and
+        the summary is not broken out per action.
+Next:   (a) repeat the run once to see if 3.4 s p95 reproduces; (b) run it with
+        counters temporarily off (same data) to isolate their cost; (c) tag
+        k6 output per action (feed / follow / like / post) so the slow action
+        is visible; (d) check whether Docker/other apps were using the CPU.
+        Do not treat this number as the cost of counters until (b) is done.
+
+
+------------------------------------------------------------------------------
+[2026-10-12 21:30 UTC] k6 staged 2000 VUs - repeat run and first diagnosis
+Source: traffic-metrics-13-10-2026.txt (second entry)
+Result: run 2 of the same config was worse again: 36,059 requests, 292.78 RPS,
+        avg 2003 ms, p50 2364 ms, p95 4571 ms, max 5338 ms, 0.07% failed (409s
+        only), cache hit 27.7%.
+        Summary of the three runs of this config: 11:05 p95 268 ms / 468 RPS;
+        21:26 p95 3417 ms / 381 RPS; 21:30 p95 4571 ms / 293 RPS.
+        The slowdown reproduces, so it is not one-off noise, and it got worse
+        between consecutive runs (data written by each run, warm-up state, or
+        machine load are possible reasons; not determined).
+Checked at idle after the runs (everything fast, Postgres 0.4% CPU, 533 MiB):
+  - Single requests: /feed miss 37 ms, /home-feed 18 ms, follow 60 ms,
+    unfollow 39 ms, health 4 ms (one sample each).
+  - Counter cost, measured directly (200 follow+unfollow pairs): old shape
+    8.4 ms, in a transaction without counters 10.5 ms, with counters (current)
+    8.8 ms. A SELECT 1 round trip is 0.7 ms. So the counter UPDATEs and the
+    extra BEGIN/COMMIT cost ~0 at idle; 0 drift after the bench.
+  - /feed posts query, EXPLAIN ANALYZE (users 777 and 2500): 14-15 ms
+    execution. About 1,100-1,700 posts rows are read via bitmap scan and
+    sorted; a hash join builds a hash of all 26,000 users every call (~8 ms
+    of the plan). Forcing index nested loops on users: median 10.9 ms vs 14.8
+    ms default. So the join is ~4 ms of ~15; reading the followed users'
+    posts is the rest and is inherent to the query.
+  - users table is now 3.8 MB (was 1.6 MB): three counter columns plus dead
+    rows from the backfill. posts is 132 MB.
+Meaning: one cache-missing /feed costs ~11-15 ms of database CPU. At ~275
+        misses/s (33k feed requests, 36% hit rate, in 120 s) that is
+        3-4 CPU-seconds per second, which can saturate a small Docker VM and
+        queue everything, including the cache hits behind the pool. This is a
+        plausible bottleneck, but it is a hypothesis: there is no 11:05
+        measurement of the same query, and DB CPU was not sampled during the run.
+Not shown: that the counters caused the slowdown. Their write cost is ~0 at
+        idle. Under heavy concurrent load a longer-held connection could still
+        matter (4 round trips per follow instead of 1); untested.
+Next:   (1) A/B on identical data: run the same suite against the previous
+        commit's code (counters off) and compare; (2) sample CPU of the
+        Postgres container and node during a run (docker stats every few
+        seconds); (3) add per-action latency to the k6 output.
+
+
+------------------------------------------------------------------------------
 NEXT TESTS TO ADD (planned, not run)
   1. /feed baseline on the 447k-post data (staged suite, 500 and 2000 VUs).
   2. Same with USER_COUNT=26000 POST_COUNT=447160 so all data is used.

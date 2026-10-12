@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { pool } from "../db/pool";
+import { pool, withTransaction } from "../db/pool";
 
 function conflict(message: string): Error & { statusCode: number } {
   return Object.assign(new Error(message), { statusCode: 409 });
@@ -43,14 +43,21 @@ export async function postsRoutes(app: FastifyInstance): Promise<void> {
 
     await ensureUserExists(userId);
 
-    const result = await pool.query(
-      `INSERT INTO posts (user_id, content, created_at)
-       VALUES ($1, $2, NOW())
-       RETURNING id, user_id AS "userId", content, created_at AS "createdAt"`,
-      [userId, content],
-    );
+    const post = await withTransaction(async (client) => {
+      const result = await client.query(
+        `INSERT INTO posts (user_id, content, created_at)
+         VALUES ($1, $2, NOW())
+         RETURNING id, user_id AS "userId", content, created_at AS "createdAt"`,
+        [userId, content],
+      );
+      await client.query(
+        "UPDATE users SET post_count = post_count + 1 WHERE id = $1",
+        [userId],
+      );
+      return result.rows[0];
+    });
 
-    return reply.code(201).send(result.rows[0]);
+    return reply.code(201).send(post);
   });
 
   app.post("/posts/:postId/like", async (request, reply) => {
@@ -74,15 +81,24 @@ export async function postsRoutes(app: FastifyInstance): Promise<void> {
     await ensurePostExists(postId);
     await ensureUserExists(userId);
 
-    const result = await pool.query(
-      `INSERT INTO likes (user_id, post_id, created_at)
-       VALUES ($1, $2, NOW())
-       ON CONFLICT (user_id, post_id) DO NOTHING
-       RETURNING user_id AS "userId", post_id AS "postId"`,
-      [userId, postId],
-    );
+    const liked = await withTransaction(async (client) => {
+      const result = await client.query(
+        `INSERT INTO likes (user_id, post_id, created_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (user_id, post_id) DO NOTHING`,
+        [userId, postId],
+      );
+      if (result.rowCount === 0) {
+        return false;
+      }
+      await client.query(
+        "UPDATE posts SET like_count = like_count + 1 WHERE id = $1",
+        [postId],
+      );
+      return true;
+    });
 
-    if (result.rowCount === 0) {
+    if (!liked) {
       throw conflict("User already liked this post");
     }
 
