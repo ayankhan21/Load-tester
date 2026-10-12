@@ -2,17 +2,45 @@ import http from "k6/http";
 import { Counter } from "k6/metrics";
 import { check, sleep } from "k6";
 
-export const options = {
-  vus: 20,
-  duration: "30s",
+// SUITE=stages runs a 120s ramp / peak / fluctuate / ramp-down profile up to
+// MAX_VUS with a user-like action mix; the default suite is the flat 80/5/10/5 run.
+const isStagesSuite = __ENV.SUITE === "stages";
+const maxVus = Number(__ENV.MAX_VUS ?? "500");
+const stagesOptions = {
+  scenarios: {
+    stages: {
+      executor: "ramping-vus",
+      startVUs: 0,
+      gracefulRampDown: "10s",
+      stages: [
+        { duration: "30s", target: maxVus },
+        { duration: "30s", target: maxVus },
+        { duration: "5s", target: Math.round(maxVus * 0.7) },
+        { duration: "5s", target: maxVus },
+        { duration: "5s", target: Math.round(maxVus * 0.6) },
+        { duration: "5s", target: maxVus },
+        { duration: "5s", target: Math.round(maxVus * 0.8) },
+        { duration: "5s", target: maxVus },
+        { duration: "30s", target: 0 },
+      ],
+    },
+  },
   discardResponseBodies: true,
 };
+
+export const options = isStagesSuite
+  ? stagesOptions
+  : {
+      vus: 20,
+      duration: "30s",
+      discardResponseBodies: true,
+    };
 
 const baseUrl = (__ENV.BASE_URL ?? "http://127.0.0.1:3000").replace(/\/$/, "");
 const userCount = 5_000;
 const postCount = 50_000;
-const thinkMinSeconds = Number(__ENV.THINK_MIN_MS ?? "250") / 1_000;
-const thinkMaxSeconds = Number(__ENV.THINK_MAX_MS ?? "1500") / 1_000;
+const thinkMinSeconds = Number(__ENV.THINK_MIN_MS ?? (isStagesSuite ? "1000" : "250")) / 1_000;
+const thinkMaxSeconds = Number(__ENV.THINK_MAX_MS ?? (isStagesSuite ? "5000" : "1500")) / 1_000;
 const actionRequests = {
   feed: new Counter("feed_requests"),
   follow: new Counter("follow_requests"),
@@ -52,8 +80,9 @@ function getResponseHeader(response, headerName) {
 
 function sendRequest(action, method, path, body) {
   actionRequests[action].add(1);
+  // Fastify returns 400 for an empty body sent as application/json (follow has none).
   const params = {
-    ...requestParams,
+    ...(body === undefined ? {} : requestParams),
     tags: { action, name: action },
   };
   const response =
@@ -95,11 +124,14 @@ function sendRequest(action, method, path, body) {
 
 export default function () {
   const roll = Math.random();
+  // stages suite: feed 70%, follow 15%, like 10%, post 5%
+  const feedShare = isStagesSuite ? 0.7 : 0.8;
+  const followShare = isStagesSuite ? 0.15 : 0.05;
 
-  if (roll < 0.8) {
+  if (roll < feedShare) {
     const userId = randomUserId();
     sendRequest("feed", "GET", `/users/${userId}/feed?limit=20`);
-  } else if (roll < 0.85) {
+  } else if (roll < feedShare + followShare) {
     const sourceUserId = randomUserId();
     let targetUserId = randomUserId();
     while (targetUserId === sourceUserId) {

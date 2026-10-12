@@ -1,0 +1,224 @@
+
+k6 traffic benchmark
++----------------------+----------------------------------------------+
+| Timestamp            | 2026-10-12T10:32:25.985Z                     |
+| Mode                 | single                                       |
+| Workload             | random user per action                       |
+| Configured mix       | feed 70%, follow 15%, like 10%, post 5%      |
+| Suite                | stages (ramp / peak / fluctuate / ramp down) |
+| Virtual users        | ramping, max 500                             |
+| Duration             | 120s                                         |
+| DB pool max          | 50                                           |
+| Cache strategy       | Full-feed response cache (process-local)     |
+| Cache TTL (ms)       | 10000                                        |
+| Total requests       | 13914                                        |
+| Throughput (RPS)     | 107.23                                       |
+| Average latency (ms) | 9.35                                         |
+| p50 latency (ms)     | 8.12                                         |
+| p95 latency (ms)     | 23.12                                        |
+| Max latency (ms)     | 338.82                                       |
+| Failed requests      | 2113                                         |
+| Failed (%)           | 15.19                                        |
+| Checks passed        | 11801                                        |
+| Checks failed        | 2113                                         |
+| Feed requests        | 9798                                         |
+| Follow requests      | 2053                                         |
+| Like requests        | 1393                                         |
+| Post requests        | 700                                          |
+| Feed cache hits      | 1494                                         |
+| Feed cache misses    | 8236                                         |
+| Feed cache hit (%)   | 15.35                                        |
+| Failed status counts | 400:2041, 409:3, network_error:69            |
++----------------------+----------------------------------------------+
+
+k6 traffic benchmark
++----------------------+----------------------------------------------+
+| Timestamp            | 2026-10-12T10:39:22.050Z                     |
+| Mode                 | single                                       |
+| Workload             | random user per action                       |
+| Configured mix       | feed 70%, follow 15%, like 10%, post 5%      |
+| Suite                | stages (ramp / peak / fluctuate / ramp down) |
+| Virtual users        | ramping, max 500                             |
+| Duration             | 120s                                         |
+| DB pool max          | 17                                           |
+| Cache strategy       | Full-feed response cache (process-local)     |
+| Cache TTL (ms)       | 10000                                        |
+| Total requests       | 13825                                        |
+| Throughput (RPS)     | 110.24                                       |
+| Average latency (ms) | 6.78                                         |
+| p50 latency (ms)     | 7.65                                         |
+| p95 latency (ms)     | 12.60                                        |
+| Max latency (ms)     | 90.89                                        |
+| Failed requests      | 2201                                         |
+| Failed (%)           | 15.92                                        |
+| Checks passed        | 11624                                        |
+| Checks failed        | 2201                                         |
+| Feed requests        | 9556                                         |
+| Follow requests      | 2128                                         |
+| Like requests        | 1460                                         |
+| Post requests        | 706                                          |
+| Feed cache hits      | 1445                                         |
+| Feed cache misses    | 8028                                         |
+| Feed cache hit (%)   | 15.25                                        |
+| Failed status counts | 400:2114, network_error:87                   |
++----------------------+----------------------------------------------+
+
+k6 traffic benchmark
++----------------------+----------------------------------------------+
+| Timestamp            | 2026-10-12T10:43:55.849Z                     |
+| Mode                 | single                                       |
+| Workload             | random user per action                       |
+| Configured mix       | feed 70%, follow 15%, like 10%, post 5%      |
+| Suite                | stages (ramp / peak / fluctuate / ramp down) |
+| Virtual users        | ramping, max 2000                            |
+| Duration             | 120s                                         |
+| DB pool max          | 17                                           |
+| Cache strategy       | Full-feed response cache (process-local)     |
+| Cache TTL (ms)       | 10000                                        |
+| Total requests       | 58439                                        |
+| Throughput (RPS)     | 470.18                                       |
+| Average latency (ms) | 41.55                                        |
+| p50 latency (ms)     | 9.36                                         |
+| p95 latency (ms)     | 242.91                                       |
+| Max latency (ms)     | 896.96                                       |
+| Failed requests      | 50                                           |
+| Failed (%)           | 0.09                                         |
+| Checks passed        | 58389                                        |
+| Checks failed        | 50                                           |
+| Feed requests        | 40999                                        |
+| Follow requests      | 8626                                         |
+| Like requests        | 5893                                         |
+| Post requests        | 2921                                         |
+| Feed cache hits      | 16756                                        |
+| Feed cache misses    | 24243                                        |
+| Feed cache hit (%)   | 40.87                                        |
+| Failed status counts | 409:50                                       |
++----------------------+----------------------------------------------+
+
+k6 traffic benchmark
++----------------------+----------------------------------------------+
+| Timestamp            | 2026-10-12T10:48:33.067Z                     |
+| Mode                 | single                                       |
+| Workload             | random user per action                       |
+| Configured mix       | feed 70%, follow 15%, like 10%, post 5%      |
+| Suite                | stages (ramp / peak / fluctuate / ramp down) |
+| Virtual users        | ramping, max 2000                            |
+| Duration             | 120s                                         |
+| DB pool max          | 50                                           |
+| Cache strategy       | Full-feed response cache (process-local)     |
+| Cache TTL (ms)       | 10000                                        |
+| Total requests       | 58710                                        |
+| Throughput (RPS)     | 473.83                                       |
+| Average latency (ms) | 14.37                                        |
+| p50 latency (ms)     | 8.20                                         |
+| p95 latency (ms)     | 45.78                                        |
+| Max latency (ms)     | 657.99                                       |
+| Failed requests      | 43                                           |
+| Failed (%)           | 0.07                                         |
+| Checks passed        | 58667                                        |
+| Checks failed        | 43                                           |
+| Feed requests        | 40998                                        |
+| Follow requests      | 8815                                         |
+| Like requests        | 5898                                         |
+| Post requests        | 2999                                         |
+| Feed cache hits      | 16865                                        |
+| Feed cache misses    | 24133                                        |
+| Feed cache hit (%)   | 41.14                                        |
+| Failed status counts | 409:43                                       |
++----------------------+----------------------------------------------+
+
+k6 traffic benchmark
++----------------------+----------------------------------------------+
+| Timestamp            | 2026-10-12T10:57:50.950Z                     |
+| Mode                 | single                                       |
+| Workload             | random user per action                       |
+| Configured mix       | feed 70%, follow 15%, like 10%, post 5%      |
+| Suite                | stages (ramp / peak / fluctuate / ramp down) |
+| Virtual users        | ramping, max 2000                            |
+| Duration             | 120s                                         |
+| DB pool max          | 50                                           |
+| Cache strategy       | Full-feed response cache (process-local)     |
+| Cache TTL (ms)       | 10000                                        |
+| Total requests       | 58517                                        |
+| Throughput (RPS)     | 470.80                                       |
+| Average latency (ms) | 33.20                                        |
+| p50 latency (ms)     | 11.47                                        |
+| p95 latency (ms)     | 163.98                                       |
+| Max latency (ms)     | 776.07                                       |
+| Failed requests      | 45                                           |
+| Failed (%)           | 0.08                                         |
+| Checks passed        | 58472                                        |
+| Checks failed        | 45                                           |
+| Feed requests        | 40842                                        |
+| Follow requests      | 8851                                         |
+| Like requests        | 5856                                         |
+| Post requests        | 2968                                         |
+| Feed cache hits      | 16658                                        |
+| Feed cache misses    | 24184                                        |
+| Feed cache hit (%)   | 40.79                                        |
+| Failed status counts | 409:45                                       |
++----------------------+----------------------------------------------+
+
+k6 traffic benchmark
++----------------------+----------------------------------------------+
+| Timestamp            | 2026-10-12T11:01:28.248Z                     |
+| Mode                 | single                                       |
+| Workload             | random user per action                       |
+| Configured mix       | feed 70%, follow 15%, like 10%, post 5%      |
+| Suite                | stages (ramp / peak / fluctuate / ramp down) |
+| Virtual users        | ramping, max 2000                            |
+| Duration             | 120s                                         |
+| DB pool max          | 17                                           |
+| Cache strategy       | Full-feed response cache (process-local)     |
+| Cache TTL (ms)       | 10000                                        |
+| Total requests       | 58510                                        |
+| Throughput (RPS)     | 471.23                                       |
+| Average latency (ms) | 23.60                                        |
+| p50 latency (ms)     | 9.45                                         |
+| p95 latency (ms)     | 111.23                                       |
+| Max latency (ms)     | 466.67                                       |
+| Failed requests      | 40                                           |
+| Failed (%)           | 0.07                                         |
+| Checks passed        | 58470                                        |
+| Checks failed        | 40                                           |
+| Feed requests        | 40855                                        |
+| Follow requests      | 8817                                         |
+| Like requests        | 5883                                         |
+| Post requests        | 2955                                         |
+| Feed cache hits      | 16840                                        |
+| Feed cache misses    | 24015                                        |
+| Feed cache hit (%)   | 41.22                                        |
+| Failed status counts | 409:40                                       |
++----------------------+----------------------------------------------+
+
+k6 traffic benchmark
++----------------------+----------------------------------------------+
+| Timestamp            | 2026-10-12T11:05:45.286Z                     |
+| Mode                 | single                                       |
+| Workload             | random user per action                       |
+| Configured mix       | feed 70%, follow 15%, like 10%, post 5%      |
+| Suite                | stages (ramp / peak / fluctuate / ramp down) |
+| Virtual users        | ramping, max 2000                            |
+| Duration             | 120s                                         |
+| DB pool max          | 17                                           |
+| Cache strategy       | Full-feed response cache (process-local)     |
+| Cache TTL (ms)       | 10000                                        |
+| Total requests       | 58050                                        |
+| Throughput (RPS)     | 467.92                                       |
+| Average latency (ms) | 51.05                                        |
+| p50 latency (ms)     | 11.92                                        |
+| p95 latency (ms)     | 268.25                                       |
+| Max latency (ms)     | 723.69                                       |
+| Failed requests      | 55                                           |
+| Failed (%)           | 0.09                                         |
+| Checks passed        | 57995                                        |
+| Checks failed        | 55                                           |
+| Feed requests        | 40667                                        |
+| Follow requests      | 8657                                         |
+| Like requests        | 5833                                         |
+| Post requests        | 2893                                         |
+| Feed cache hits      | 16607                                        |
+| Feed cache misses    | 24060                                        |
+| Feed cache hit (%)   | 40.84                                        |
+| Failed status counts | 409:55                                       |
++----------------------+----------------------------------------------+

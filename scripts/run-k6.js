@@ -8,6 +8,7 @@ const dashboardPort = process.env.K6_WEB_DASHBOARD_PORT ?? "6000";
 const inputArgs = process.argv.slice(2);
 const k6Args = [];
 let mode = "single";
+let suite = "flat";
 
 for (let index = 0; index < inputArgs.length; index += 1) {
   const arg = inputArgs[index];
@@ -16,6 +17,8 @@ for (let index = 0; index < inputArgs.length; index += 1) {
     index += 1;
   } else if (arg.startsWith("--mode=")) {
     mode = arg.slice("--mode=".length);
+  } else if (arg.startsWith("--suite=")) {
+    suite = arg.slice("--suite=".length);
   } else {
     k6Args.push(arg);
   }
@@ -25,6 +28,15 @@ if (mode !== "single" && mode !== "cluster" && mode !== "replica") {
   console.error("Mode must be 'single', 'cluster' or 'replica'.");
   process.exit(1);
 }
+
+if (suite !== "flat" && suite !== "stages") {
+  console.error("Suite must be 'flat' or 'stages'.");
+  process.exit(1);
+}
+
+const isStages = suite === "stages";
+const maxVus = optionValue("max-vus", "500");
+const stagesDescription = `Staged suite (120s): ramp 0 -> ${maxVus} VUs over 30s, hold peak 30s, fluctuate around peak (70%/100%/60%/100%/80%/100% in 5s steps) for 30s, ramp down to 0 over 30s. Each VU acts as a user: feed 70%, follow 15%, like 10%, create post 5%, with 1-5s random think time between actions.`;
 
 function optionValue(name, fallback) {
   const equalsArg = k6Args.find((arg) => arg.startsWith(`--${name}=`));
@@ -85,9 +97,10 @@ const child = spawn(
     "--service-ports",
     "-e",
     `BASE_URL=http://host.docker.internal:${port}`,
+    ...(isStages ? ["-e", "SUITE=stages", "-e", `MAX_VUS=${maxVus}`] : []),
     "k6",
     "run",
-    ...k6Args,
+    ...k6Args.filter((arg) => !arg.startsWith("--max-vus")),
     "/scripts/traffic-k6.js",
   ],
   { stdio: ["inherit", "pipe", "pipe"] },
@@ -141,9 +154,22 @@ child.on("close", (code, signal) => {
       ["Timestamp", new Date().toISOString()],
       ["Mode", mode],
       ["Workload", "random user per action"],
-      ["Configured mix", "feed 80%, follow 5%, like 10%, post 5%"],
-      ["Virtual users", optionValue("vus", "20")],
-      ["Duration", optionValue("duration", "30s")],
+      [
+        "Configured mix",
+        isStages
+          ? "feed 70%, follow 15%, like 10%, post 5%"
+          : "feed 80%, follow 5%, like 10%, post 5%",
+      ],
+      ...(isStages
+        ? [
+            ["Suite", "stages (ramp / peak / fluctuate / ramp down)"],
+            ["Virtual users", `ramping, max ${maxVus}`],
+            ["Duration", "120s"],
+          ]
+        : [
+            ["Virtual users", optionValue("vus", "20")],
+            ["Duration", optionValue("duration", "30s")],
+          ]),
       ["DB pool max", process.env.DB_POOL_MAX ?? "20"],
       ...(mode === "replica"
         ? [
