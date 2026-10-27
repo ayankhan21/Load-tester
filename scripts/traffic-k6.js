@@ -26,6 +26,7 @@ const stagesOptions = {
     },
   },
   discardResponseBodies: true,
+  summaryTrendStats: ["avg", "min", "med", "max", "p(90)", "p(95)", "p(99)"],
 };
 
 export const options = isStagesSuite
@@ -34,6 +35,7 @@ export const options = isStagesSuite
       vus: 20,
       duration: "30s",
       discardResponseBodies: true,
+      summaryTrendStats: ["avg", "min", "med", "max", "p(90)", "p(95)", "p(99)"],
     };
 
 const baseUrl = (__ENV.BASE_URL ?? "http://127.0.0.1:3000").replace(/\/$/, "");
@@ -124,9 +126,10 @@ function sendRequest(action, method, path, body) {
 
 export default function () {
   const roll = Math.random();
-  // stages suite: feed 70%, follow 15%, like 10%, post 5%
-  const feedShare = isStagesSuite ? 0.7 : 0.8;
-  const followShare = isStagesSuite ? 0.15 : 0.05;
+  // stages suite: feed 85%, follow 4%, like 8%, post 3%
+  const feedShare = isStagesSuite ? 0.85 : 0.8;
+  const followShare = isStagesSuite ? 0.04 : 0.05;
+  const likeShare = isStagesSuite ? 0.08 : 0.1;
 
   if (roll < feedShare) {
     const userId = randomUserId();
@@ -142,7 +145,7 @@ export default function () {
       "POST",
       `/users/${sourceUserId}/follow/${targetUserId}`,
     );
-  } else if (roll < 0.95) {
+  } else if (roll < feedShare + followShare + likeShare) {
     const userId = randomUserId();
     const postId = randomInt(1, postCount);
     sendRequest(
@@ -194,6 +197,7 @@ export function handleSummary(data) {
     avgMs: durationMetrics.avg ?? 0,
     p50Ms: durationMetrics.med ?? 0,
     p95Ms: durationMetrics["p(95)"] ?? 0,
+    p99Ms: durationMetrics["p(99)"] ?? 0,
     maxMs: durationMetrics.max ?? 0,
     failedRequests: Math.round((requestMetrics.count ?? 0) * failedRate),
     failedPercent: failedRate * 100,

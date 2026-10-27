@@ -39,7 +39,7 @@ if (suite !== "flat" && suite !== "stages") {
 
 const isStages = suite === "stages";
 const maxVus = optionValue("max-vus", "500");
-const stagesDescription = `Staged suite (120s): ramp 0 -> ${maxVus} VUs over 30s, hold peak 30s, fluctuate around peak (70%/100%/60%/100%/80%/100% in 5s steps) for 30s, ramp down to 0 over 30s. Each VU acts as a user: feed 70%, follow 15%, like 10%, create post 5%, with 1-5s random think time between actions.`;
+const stagesDescription = `Staged suite (120s): ramp 0 -> ${maxVus} VUs over 30s, hold peak 30s, fluctuate around peak (70%/100%/60%/100%/80%/100% in 5s steps) for 30s, ramp down to 0 over 30s. Each VU acts as a user: feed 85%, follow 4%, like 8%, create post 3%, with a random think time between actions (default 1-5s).`;
 
 function optionValue(name, fallback) {
   const equalsArg = k6Args.find((arg) => arg.startsWith(`--${name}=`));
@@ -85,7 +85,12 @@ if (mode === "replica") {
 const poolMax = Number(process.env.DB_POOL_MAX ?? 20);
 const runDate = new Date();
 const dateSuffix = `${runDate.getDate()}-${runDate.getMonth() + 1}-${runDate.getFullYear()}`;
-const outputPath = join(process.cwd(), `traffic-metrics-${dateSuffix}.txt`);
+const outputPath = join(
+  process.cwd(),
+  optionValue("output", `traffic-metrics-${dateSuffix}.txt`),
+);
+const thinkMinMs = optionValue("think-min-ms", "");
+const thinkMaxMs = optionValue("think-max-ms", "");
 let stdout = "";
 let stderr = "";
 
@@ -101,9 +106,14 @@ const child = spawn(
     "-e",
     `BASE_URL=http://host.docker.internal:${port}`,
     ...(isStages ? ["-e", "SUITE=stages", "-e", `MAX_VUS=${maxVus}`] : []),
+    ...(thinkMinMs ? ["-e", `THINK_MIN_MS=${thinkMinMs}`] : []),
+    ...(thinkMaxMs ? ["-e", `THINK_MAX_MS=${thinkMaxMs}`] : []),
     "k6",
     "run",
-    ...k6Args.filter((arg) => !arg.startsWith("--max-vus")),
+    ...k6Args.filter(
+      (arg) =>
+        !/^--(max-vus|output|think-min-ms|think-max-ms)(=|$)/.test(arg),
+    ),
     "/scripts/traffic-k6.js",
   ],
   { stdio: ["inherit", "pipe", "pipe"] },
@@ -161,7 +171,7 @@ child.on("close", (code, signal) => {
       [
         "Configured mix",
         isStages
-          ? "feed 70%, follow 15%, like 10%, post 5%"
+          ? "feed 85%, follow 4%, like 8%, post 3%"
           : "feed 80%, follow 5%, like 10%, post 5%",
       ],
       ...(isStages
@@ -174,6 +184,10 @@ child.on("close", (code, signal) => {
             ["Virtual users", optionValue("vus", "20")],
             ["Duration", optionValue("duration", "30s")],
           ]),
+      [
+        "Think time (ms)",
+        `${thinkMinMs || (isStages ? "1000" : "250")}-${thinkMaxMs || (isStages ? "5000" : "1500")}`,
+      ],
       ["DB pool max", process.env.DB_POOL_MAX ?? "20"],
       ...(mode === "replica"
         ? [
@@ -205,6 +219,7 @@ child.on("close", (code, signal) => {
       ["Average latency (ms)", metrics.avgMs.toFixed(2)],
       ["p50 latency (ms)", metrics.p50Ms.toFixed(2)],
       ["p95 latency (ms)", metrics.p95Ms.toFixed(2)],
+      ["p99 latency (ms)", metrics.p99Ms.toFixed(2)],
       ["Max latency (ms)", metrics.maxMs.toFixed(2)],
       ["Failed requests", String(metrics.failedRequests)],
       ["Failed (%)", metrics.failedPercent.toFixed(2)],
