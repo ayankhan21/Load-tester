@@ -39,7 +39,7 @@ if (suite !== "flat" && suite !== "stages") {
 
 const isStages = suite === "stages";
 const maxVus = optionValue("max-vus", "500");
-const stagesDescription = `Staged suite (120s): ramp 0 -> ${maxVus} VUs over 30s, hold peak 30s, fluctuate around peak (70%/100%/60%/100%/80%/100% in 5s steps) for 30s, ramp down to 0 over 30s. Each VU acts as a user: feed 85%, follow 4%, like 8%, create post 3%, with a random think time between actions (default 1-5s).`;
+const stagesDescription = `Staged suite (120s): ramp 0 -> ${maxVus} VUs over 30s, hold peak 30s, fluctuate around peak (70%/100%/60%/100%/80%/100% in 5s steps) for 30s, ramp down to 0 over 30s. Each VU acts as a user: feed 90%, follow 3%, like 5%, create post 2%, with a random think time between actions (default 1-5s).`;
 
 function optionValue(name, fallback) {
   const equalsArg = k6Args.find((arg) => arg.startsWith(`--${name}=`));
@@ -171,7 +171,7 @@ child.on("close", (code, signal) => {
       [
         "Configured mix",
         isStages
-          ? "feed 85%, follow 4%, like 8%, post 3%"
+          ? "feed 90%, follow 3%, like 5%, post 2%"
           : "feed 80%, follow 5%, like 10%, post 5%",
       ],
       ...(isStages

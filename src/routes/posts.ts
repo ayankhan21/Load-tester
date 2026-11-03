@@ -1,9 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import { enqueueLike } from "../likes/like-buffer";
 import { pool, withTransaction } from "../db/pool";
-
-function conflict(message: string): Error & { statusCode: number } {
-  return Object.assign(new Error(message), { statusCode: 409 });
-}
 
 async function ensureUserExists(userId: number): Promise<void> {
   const userResult = await pool.query("SELECT id FROM users WHERE id = $1", [
@@ -11,15 +8,6 @@ async function ensureUserExists(userId: number): Promise<void> {
   ]);
   if (userResult.rowCount === 0) {
     throw Object.assign(new Error("User not found"), { statusCode: 404 });
-  }
-}
-
-async function ensurePostExists(postId: number): Promise<void> {
-  const postResult = await pool.query("SELECT id FROM posts WHERE id = $1", [
-    postId,
-  ]);
-  if (postResult.rowCount === 0) {
-    throw Object.assign(new Error("Post not found"), { statusCode: 404 });
   }
 }
 
@@ -78,34 +66,19 @@ export async function postsRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    await ensurePostExists(postId);
-    await ensureUserExists(userId);
-
-    const liked = await withTransaction(async (client) => {
-      const result = await client.query(
-        `INSERT INTO likes (user_id, post_id, created_at)
-         VALUES ($1, $2, NOW())
-         ON CONFLICT (user_id, post_id) DO NOTHING`,
-        [userId, postId],
-      );
-      if (result.rowCount === 0) {
-        return false;
-      }
-      await client.query(
-        "UPDATE posts SET like_count = like_count + 1 WHERE id = $1",
-        [postId],
-      );
-      return true;
-    });
-
-    if (!liked) {
-      throw conflict("User already liked this post");
+    // Write-behind: the like is written to Postgres later in a batch. Missing
+    // users/posts and duplicate likes are skipped at flush time, not rejected.
+    if (enqueueLike(userId, postId) === "full") {
+      return reply
+        .code(503)
+        .header("retry-after", "1")
+        .send({ error: "Like buffer is full, retry shortly" });
     }
 
-    return reply.code(201).send({
+    return reply.code(202).send({
       userId,
       postId,
-      message: "Post liked",
+      message: "Like accepted",
     });
   });
 }

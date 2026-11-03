@@ -126,10 +126,10 @@ function sendRequest(action, method, path, body) {
 
 export default function () {
   const roll = Math.random();
-  // stages suite: feed 85%, follow 4%, like 8%, post 3%
-  const feedShare = isStagesSuite ? 0.85 : 0.8;
-  const followShare = isStagesSuite ? 0.04 : 0.05;
-  const likeShare = isStagesSuite ? 0.08 : 0.1;
+  // stages suite: feed 90%, follow 3%, like 5%, post 2%
+  const feedShare = isStagesSuite ? 0.9 : 0.8;
+  const followShare = isStagesSuite ? 0.03 : 0.05;
+  const likeShare = isStagesSuite ? 0.05 : 0.1;
 
   if (roll < feedShare) {
     const userId = randomUserId();

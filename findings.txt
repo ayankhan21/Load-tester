@@ -297,6 +297,145 @@ Next:   (1) A/B on identical data: run the same suite against the previous
 
 
 ------------------------------------------------------------------------------
+[2026-11-03 22:10 UTC] k6 staged 2000 VUs - likes made write-behind (202)
+Source: traffic-metrics-likes-async-4-11-2026.txt
+Change: POST /posts/:id/like no longer touches the DB in the request. It
+        validates ids, puts (user, post) in a per-process in-memory buffer
+        (deduped by key) and returns 202 (503 if the buffer is full). The
+        buffer is written in one SQL statement when it holds 50 entries or
+        every 10 s (ON CONFLICT DO NOTHING, skips missing users/posts, adds
+        +N to like_count per post for rows actually inserted). Cap 500
+        pending+in-flight, 2 retries then drop, flush on SIGTERM/SIGINT.
+        The two existence SELECTs and the 404/409 responses on like are gone.
+        Code: src/likes/like-buffer.ts, routes/posts.ts, routes/health.ts.
+Config: stages, 2000 VUs, single process, --no-cache, think 4000-5000 ms,
+        DB pool max 50. Same as the 2026-10-26 18:53 run.
+Result: 37,718 requests, 303.24 RPS, avg 264.65 ms, p50 120.33 ms, p95 983.57
+        ms, p99 1231.47 ms, max 1507.92 ms, 14 failed (0.04%, all 409 - these
+        can only be follows now, likes cannot return 409).
+        2026-10-26 run for comparison: 34,815 requests, 279.52 RPS, avg 673.91
+        ms, p50 704.55 ms, p95 1625.69 ms, p99 1880.26 ms, 15 failed (409).
+Buffer (from /health after the run, one process, 2 smoke-test likes included):
+        2,970 like requests -> 2,969 enqueued + 1 deduped in buffer;
+        139 batches, 2,966 inserted, 3 skipped (already liked); 0 rejected
+        (cap never hit), 0 retries, 0 dropped; high-water mark 63 of 500;
+        last flush 11.7 ms, slowest flush 552 ms; pending 0 after the run.
+Consistency: likes rows 1,536,669 -> 1,539,635 (+2,966 = likes inserted);
+        sum(like_count) equals count(likes); 0 posts with like_count != actual
+        number of likes rows.
+Meaning: the buffer kept up with ~25 likes/s at 2000 VUs with a lot of
+        headroom, and the counters stayed exact.
+Not attributed: the latency improvement vs 26 Oct. Likes are 8% of requests
+        and the feed (85%) dominates DB load, so removing like DB work is not
+        an obvious explanation for p50 704 -> 120 ms. This is one run; the same
+        config varied from p95 268 ms to 4571 ms between runs on 12 Oct, the
+        data has grown since 26 Oct (more posts/likes), and the k6 output is
+        not split per action. like latency is now enqueue time only, so it
+        no longer measures DB write cost.
+Open:   batches averaged ~21 likes, more batches than a pure 50-entry/10 s
+        estimate suggests (~70); not investigated. Repeat the run, and run
+        the old code on the same data, before claiming a gain. Follow/post
+        have not been changed.
+
+
+------------------------------------------------------------------------------
+[2026-11-03 22:17 UTC] k6 staged 2000 VUs - A/B: old sync likes vs write-behind
+Source: traffic-metrics-likes-sync-4-11-2026.txt (old code) and
+        traffic-metrics-likes-async-4-11-2026.txt (write-behind, 22:10 entry)
+Method: same config both runs (stages, 2000 VUs, single process, --no-cache,
+        think 4000-5000 ms, pool 50), same database, run back to back ~7 min
+        apart. Old code = committed HEAD (src stashed, then restored).
+        Old code confirmed before the run: like returned 201 then 409.
+Result (old sync likes vs write-behind):
+        requests      35,455   vs 37,718
+        RPS           284.31   vs 303.24   (+6.7%)
+        avg ms        584.74   vs 264.65   (-55%)
+        p50 ms        659.80   vs 120.33   (-82%)
+        p95 ms        1257.95  vs 983.57   (-22%)
+        p99 ms        1423.01  vs 1231.47  (-13%)
+        max ms        1842.67  vs 1507.92
+        failed        16 (409) vs 14 (409)
+        The old-code run (p50 660, p95 1258, 284 RPS) is in line with the
+        26 Oct run of the same code (p50 705, p95 1626, 280 RPS), so the
+        baseline reproduces.
+Order: write-behind ran first (right after Docker/Postgres was started cold),
+        old code second (warm). That ordering would tend to favour the old
+        code, so it does not explain the write-behind run being faster.
+Not shown: why. Hypothesis only: each old like held a pool connection for 4
+        round trips (2 SELECTs + BEGIN/INSERT/UPDATE/COMMIT), and at 2000 VUs
+        with 50 connections requests queue on the pool, so removing that work
+        frees connections for the feed. Not tested; likes are 8% of requests.
+Caveats: one run per variant; the same config varied widely between runs on
+        12 Oct (p95 268 -> 4571 ms); k6 output is not split per action, so
+        the feed vs like latency effect is not visible; like latency in the
+        new code is enqueue time only. Follow/post unchanged.
+Next:   repeat each variant 2 more times alternating the order; add per-action
+        latency tags to the k6 summary; sample docker stats during runs.
+
+
+------------------------------------------------------------------------------
+[2026-11-03 22:30 UTC] k6 staged 2000 VUs - new mix, cache ON, async likes + follows
+Source: traffic-metrics-async-likes-follows-cache-4-11-2026.txt (async) and
+        traffic-metrics-sync-likes-follows-cache-4-11-2026.txt (old code)
+Change: follows are now write-behind like likes. The follow route validates
+        ids, answers 409 for self-follow (no DB), else enqueues and returns
+        202 (503 if full). A flush inserts with ON CONFLICT DO NOTHING (skips
+        missing users), adds follower_count/following_count per affected user
+        in the same statement, then invalidates the followers' cached feeds
+        (after the commit). Unfollow (DELETE) stays synchronous but first
+        cancels a matching pending follow, so a follow in the buffer can't
+        land after its unfollow; a follow already being written (in flight)
+        is not covered. Shared code: src/buffer/write-behind-buffer.ts; the
+        like buffer was moved onto it. Per-feature env vars LIKE_* / FOLLOW_*
+        (batch 50, flush 10 s, cap 500).
+Also:   k6 stages mix changed to feed 90 / like 5 / follow 3 / post 2 (was
+        85/8/4/3), so these runs are not comparable with earlier stages runs.
+Config: stages, 2000 VUs, single process, feed cache ON (10 s TTL), think
+        4000-5000 ms, pool 50. Server restarted before each run (cold cache).
+Result (old sync code vs async likes + follows):
+        requests      39,641   vs 39,645
+        RPS           319.16   vs 318.66
+        avg ms        20.66    vs 21.80
+        p50 ms        12.75    vs 11.23
+        p95 ms        74.98    vs 73.08
+        p99 ms        194.17   vs 300.23
+        max ms        675.31   vs 943.06
+        failed        7 (409)  vs 0
+        cache hit %   39.44    vs 39.26
+        Async ran first, old code second on the same data.
+Buffers (async run, from /health after the run):
+        likes:   1,959 enqueued, 47 batches, 1,956 inserted, 3 skipped,
+                 high-water 52, slowest flush 99 ms, 0 rejected/retried/dropped
+        follows: 1,183 enqueued, 30 batches, 1,179 inserted, 4 skipped,
+                 high-water 51, slowest flush 46 ms, 0 rejected/retried/dropped
+Consistency (async run): likes +1,956, follows +1,179, posts +806, all equal
+        to the inserted counts; sum(like_count)=count(likes),
+        sum(follower_count)=sum(following_count)=count(follows),
+        sum(post_count)=count(posts); 0 users and 0 posts whose counters
+        differ from their actual rows.
+Smoke tests (async code): follow 202, duplicate 202 (deduped in buffer),
+        self-follow 409, unfollow of a pending follow 200 (cancelled, 0 rows
+        written), follow flushed after ~10 s with counters +1/+1, unfollow
+        after write 200 with counters back, unfollow of nothing 404.
+Meaning: with the feed cache on there is no measurable difference between the
+        two versions at this load. RPS, avg, p50 and p95 are within noise.
+        That fits the earlier no-cache gain being about freeing DB
+        connections that the feed was queueing on; with the cache the feed no
+        longer saturates the pool. That is an interpretation, not tested.
+        p99 and max were worse in the async run (300 vs 194 ms, 943 vs 675
+        ms); with one run each this may be noise, or flush bursts competing
+        with feed misses for connections. Not determined.
+Not shown: whether the buffers help at higher write volume. Writes here are
+        only ~25 likes+follows/s combined, the cap was never hit, and no
+        failure/retry path (DB slow, FK drop) was exercised under load.
+        Average batch ~40 entries (the 21 seen on the earlier like-only run
+        was not explained).
+Next:   repeat both variants alternating order; try a write-heavy mix (e.g.
+        like/follow 20-30%) where the sync path should hurt; add per-action
+        latency tags to k6; test the cap (503) and a failing flush on purpose.
+
+
+------------------------------------------------------------------------------
 NEXT TESTS TO ADD (planned, not run)
   1. /feed baseline on the 447k-post data (staged suite, 500 and 2000 VUs).
   2. Same with USER_COUNT=26000 POST_COUNT=447160 so all data is used.

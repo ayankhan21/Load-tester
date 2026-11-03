@@ -1,0 +1,35 @@
+
+k6 traffic benchmark
++----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------+
+| Timestamp            | 2026-11-03T22:10:31.591Z                                                                                                                         |
+| Notes                | No cache. Mix feed 85/like 8/follow 4/post 3, 4-5s think time. Single process. Likes write-behind: batch 50, flush 10s, cap 500 (202, buffered). |
+| Mode                 | single                                                                                                                                           |
+| Workload             | random user per action                                                                                                                           |
+| Configured mix       | feed 85%, follow 4%, like 8%, post 3%                                                                                                            |
+| Suite                | stages (ramp / peak / fluctuate / ramp down)                                                                                                     |
+| Virtual users        | ramping, max 2000                                                                                                                                |
+| Duration             | 120s                                                                                                                                             |
+| Think time (ms)      | 4000-5000                                                                                                                                        |
+| DB pool max          | 50                                                                                                                                               |
+| Cache strategy       | Disabled (--no-cache)                                                                                                                            |
+| Cache TTL (ms)       | 0                                                                                                                                                |
+| Total requests       | 37718                                                                                                                                            |
+| Throughput (RPS)     | 303.24                                                                                                                                           |
+| Average latency (ms) | 264.65                                                                                                                                           |
+| p50 latency (ms)     | 120.33                                                                                                                                           |
+| p95 latency (ms)     | 983.57                                                                                                                                           |
+| p99 latency (ms)     | 1231.47                                                                                                                                          |
+| Max latency (ms)     | 1507.92                                                                                                                                          |
+| Failed requests      | 14                                                                                                                                               |
+| Failed (%)           | 0.04                                                                                                                                             |
+| Checks passed        | 37704                                                                                                                                            |
+| Checks failed        | 14                                                                                                                                               |
+| Feed requests        | 32146                                                                                                                                            |
+| Follow requests      | 1471                                                                                                                                             |
+| Like requests        | 2968                                                                                                                                             |
+| Post requests        | 1133                                                                                                                                             |
+| Feed cache hits      | 0                                                                                                                                                |
+| Feed cache misses    | 0                                                                                                                                                |
+| Feed cache hit (%)   | 0.00                                                                                                                                             |
+| Failed status counts | 409:14                                                                                                                                           |
++----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------+

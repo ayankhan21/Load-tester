@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import { env } from "../config/env";
 import type { PoolClient } from "pg";
 import { getFeedReadPool, pool, withTransaction } from "../db/pool";
+import { cancelPendingFollow, enqueueFollow } from "../follows/follow-buffer";
 import {
   FEED_CACHE_TTL_MS,
   FeedResponse,
@@ -319,41 +320,20 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       throw conflict("Users cannot follow themselves");
     }
 
-    const existingUsers = await pool.query(
-      "SELECT id FROM users WHERE id IN ($1, $2)",
-      [userId, targetUserId],
-    );
-
-    if (existingUsers.rowCount !== 2) {
-      throw Object.assign(new Error("One or more users not found"), {
-        statusCode: 404,
-      });
+    // Write-behind: the follow is written to Postgres later in a batch, and
+    // the follower's cached feeds are invalidated after that commit. Missing
+    // users and existing follows are skipped at flush time, not rejected.
+    if (enqueueFollow(userId, targetUserId) === "full") {
+      return reply
+        .code(503)
+        .header("retry-after", "1")
+        .send({ error: "Follow buffer is full, retry shortly" });
     }
 
-    const followed = await withTransaction(async (client) => {
-      const result = await client.query(
-        `INSERT INTO follows (follower_id, following_id, created_at)
-         VALUES ($1, $2, NOW())
-         ON CONFLICT (follower_id, following_id) DO NOTHING`,
-        [userId, targetUserId],
-      );
-      if (result.rowCount === 0) {
-        return false;
-      }
-      await adjustFollowCounters(client, userId, targetUserId, 1);
-      return true;
-    });
-
-    if (!followed) {
-      throw conflict("User is already following this user");
-    }
-
-    invalidateUserFeeds(userId);
-
-    return reply.code(201).send({
+    return reply.code(202).send({
       followerId: userId,
       followingId: targetUserId,
-      message: "User followed",
+      message: "Follow accepted",
     });
   });
 
@@ -365,7 +345,12 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       "targetUserId",
     );
 
-    const unfollowed = await withTransaction(async (client) => {
+    // A follow still waiting in the write-behind buffer is simply dropped, so
+    // it can't land after this unfollow. The DB delete still runs in case the
+    // same follow was already written earlier.
+    const cancelledPending = cancelPendingFollow(userId, targetUserId);
+
+    const deletedFromDb = await withTransaction(async (client) => {
       const result = await client.query(
         `DELETE FROM follows
          WHERE follower_id = $1 AND following_id = $2`,
@@ -378,7 +363,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       return true;
     });
 
-    if (!unfollowed) {
+    if (!deletedFromDb && !cancelledPending) {
       throw Object.assign(new Error("User is not following this user"), {
         statusCode: 404,
       });

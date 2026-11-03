@@ -45,4 +45,11 @@ export const env = {
   feedCacheTtlMs: process.argv.includes("--no-cache")
     ? 0
     : getNumber("FEED_CACHE_TTL_MS", 10_000),
+  // Likes are buffered in memory per process and written in batches.
+  likeBatchSize: getNumber("LIKE_BATCH_SIZE", 50),
+  likeFlushIntervalMs: getNumber("LIKE_FLUSH_INTERVAL_MS", 10_000),
+  likeBufferCap: getNumber("LIKE_BUFFER_CAP", 500),
+  followBatchSize: getNumber("FOLLOW_BATCH_SIZE", 50),
+  followFlushIntervalMs: getNumber("FOLLOW_FLUSH_INTERVAL_MS", 10_000),
+  followBufferCap: getNumber("FOLLOW_BUFFER_CAP", 500),
 };

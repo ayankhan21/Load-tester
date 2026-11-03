@@ -3,6 +3,8 @@ import { availableParallelism } from "node:os";
 import Fastify from "fastify";
 import { env } from "./config/env";
 import { pool, replicaReadPool } from "./db/pool";
+import { shutdownFollowBuffer } from "./follows/follow-buffer";
+import { shutdownLikeBuffer } from "./likes/like-buffer";
 import { healthRoutes } from "./routes/health";
 import { postsRoutes } from "./routes/posts";
 import { usersRoutes } from "./routes/users";
@@ -67,6 +69,20 @@ async function start(port: number, readReplicaMode = false): Promise<void> {
     });
 
     console.log(`Server listening on http://0.0.0.0:${port}`);
+
+    let shuttingDown = false;
+    const shutdown = (signal: string) => {
+      if (shuttingDown) {
+        return;
+      }
+      shuttingDown = true;
+      console.log(`${signal} received, flushing buffered likes and follows.`);
+      Promise.all([shutdownLikeBuffer(), shutdownFollowBuffer()])
+        .catch((error) => console.error("Like buffer flush failed:", error))
+        .finally(() => process.exit(0));
+    };
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.on("SIGINT", () => shutdown("SIGINT"));
   } catch (error) {
     console.error("Failed to start server:", error);
     process.exit(1);
